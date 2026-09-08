@@ -1,0 +1,8 @@
+{
+  "earthward.selection.title": "Earthward — Bölge seçimi",
+  "earthward.selection.preview": "Geliştirme önizlemesi · gerçek harita yok",
+  "earthward.selection.step": "Adım %s / %s. Pilot seçimine devam et.",
+  "earthward.selection.create_unavailable": "Dünya oluşturma kullanılamıyor",
+  "earthward.selection.no_data": "%s için coğrafi veri paketi ve üretici henüz yok. Harita ve doğuş konumu seçimi kullanılamaz. Kayıt oluşturulmadı; internetten veri indirilmedi.",
+  "earthward.selection.invalid_catalog": "Seçim kataloğu eksik veya bozuk. Kayıtlara dokunulmadı."
+}

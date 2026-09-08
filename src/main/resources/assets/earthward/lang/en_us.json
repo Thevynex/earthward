@@ -1,0 +1,8 @@
+{
+  "earthward.selection.title": "Earthward — Region selection",
+  "earthward.selection.preview": "Development preview · no real map",
+  "earthward.selection.step": "Step %s / %s. Continue to the pilot selection.",
+  "earthward.selection.create_unavailable": "World creation unavailable",
+  "earthward.selection.no_data": "No geographic package or generator exists yet for %s. Map and spawn selection are unavailable. No save was created and no data was downloaded.",
+  "earthward.selection.invalid_catalog": "Selection catalog missing or invalid. Existing saves were not changed."
+}
