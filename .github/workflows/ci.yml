@@ -59,7 +59,7 @@ jobs:
           chmod +x gradlew
           ./gradlew --version 2>&1 | tee ci-output/wrapper-version.log
       - name: Build and Gradle contracts
-        run: ./gradlew --no-daemon --console=plain --max-workers=2 --stacktrace clean contractTest build 2>&1 | tee ci-output/build.log
+        run: bash tools/ci_build.sh
       - name: Verify mod JAR
         run: python3 tools/check_jar.py | tee ci-output/jar.log
       - name: Upload verified bootstrap JAR
