@@ -1,0 +1,19 @@
+Earthward Restricted Use License 1.0
+Copyright (c) 2026 Thevynex. All rights reserved.
+
+1. Scope
+These terms apply only to original Earthward code, documentation and assets for which Thevynex holds the rights. They do not replace third-party licenses, Minecraft terms, or rights that applicable law does not allow to be restricted.
+
+2. Limited permission to play
+You may download officially distributed compiled Earthward releases, install and run them for personal, non-commercial Minecraft gameplay, and keep reasonable private backup copies. This permission does not grant permission to redistribute the mod, include it in redistributed modpacks, sell it, sublicense it, or use its code or assets in another project.
+
+3. Source availability is not an open-source license
+No permission is granted to reuse, modify, distribute or create derivative works of original Earthward source code or assets without prior written permission from Thevynex. Viewing and forking this public repository within GitHub to the extent allowed by GitHub's applicable terms are not prohibited by this license. No additional downstream rights are granted by such a fork.
+
+4. Third-party material
+Third-party components remain subject to their own licenses. Preserve their notices. In particular, permissions in the NeoForged MDK template's MIT license cannot be revoked by this license. See THIRD_PARTY_NOTICES.md on the development branch.
+
+5. No warranty
+TO THE MAXIMUM EXTENT PERMITTED BY LAW, THE MATERIAL IS PROVIDED AS IS, WITHOUT WARRANTIES, INCLUDING MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE OR NON-INFRINGEMENT. THE RIGHTS HOLDER IS NOT LIABLE FOR DAMAGES ARISING FROM USE, EXCEPT WHERE LIABILITY CANNOT LAWFULLY BE EXCLUDED.
+
+For additional permissions, contact Thevynex through https://github.com/Thevynex.
