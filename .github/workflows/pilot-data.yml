@@ -1,0 +1,62 @@
+name: Earthward pilot data
+
+on:
+  push:
+    branches: [dev/bootstrap]
+    paths:
+      - '.github/workflows/pilot-data.yml'
+      - 'tools/prepare_pilot.py'
+      - 'tools/test_prepare_pilot.py'
+      - 'data/pilot_area.json'
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/pilot-data.yml'
+      - 'tools/prepare_pilot.py'
+      - 'tools/test_prepare_pilot.py'
+      - 'data/pilot_area.json'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: earthward-pilot-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pilot:
+    name: Validate and prepare pilot geometry
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Test bounded package pipeline with synthetic inputs
+        run: |
+          python3 --version
+          python3 -m unittest discover -s tools -p 'test_prepare_pilot.py' -v
+      - name: Fetch one bounded real geometry extract
+        if: github.event_name == 'push' && github.ref == 'refs/heads/dev/bootstrap'
+        timeout-minutes: 2
+        run: python3 tools/prepare_pilot.py --area data/pilot_area.json --output pilot-output --fetch
+      - name: Upload ODbL geometry package, not a world or mod
+        if: github.event_name == 'push' && github.ref == 'refs/heads/dev/bootstrap'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: earthward-pilot-geometry-${{ github.sha }}
+          path: pilot-output/
+          if-no-files-found: error
+          retention-days: 7
+      - name: Record validation boundary
+        if: always()
+        run: |
+          {
+            echo '## Pilot geometry, not generated terrain'
+            echo 'Unit tests use synthetic fixtures. Real acquisition runs only on dev/bootstrap push.'
+            echo 'Check step outcomes: skipped is not passed. No automatic request retries.'
+            echo 'A successful package contains ODbL geometry, attribution, source snapshot and hashes.'
+            echo 'It does not establish source accuracy, full coverage, game loading, terrain, spawn or performance.'
+            echo 'No raster tiles, paid services, personal credentials or runtime game downloads are used.'
+          } >> "$GITHUB_STEP_SUMMARY"
