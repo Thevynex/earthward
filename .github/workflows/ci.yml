@@ -1,0 +1,99 @@
+name: Earthward CI
+
+on:
+  push:
+    branches: [main, dev/bootstrap]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: earthward-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Java 21 contracts and NeoForge build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Setup JDK
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21.0.12.1+1'
+          architecture: x64
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a
+        with:
+          gradle-version: '9.2.1'
+          cache-disabled: true
+          dependency-graph: disabled
+          build-scan-publish: false
+      - name: Record environment
+        run: |
+          mkdir -p ci-output
+          { java -version; javac -version; gradle --version; python3 --version; uname -a; } 2>&1 | tee ci-output/environment.log
+      - name: Static source checks
+        run: python3 tools/check_source.py | tee ci-output/static.log
+      - name: Standalone synthetic contracts
+        run: |
+          mkdir -p ci-output/classes
+          javac --release 21 -encoding UTF-8 -d ci-output/classes \
+            src/main/java/io/github/thevynex/earthward/selection/SpawnSelection.java \
+            src/test/java/io/github/thevynex/earthward/selection/SpawnSelectionContractTest.java
+          java -cp ci-output/classes io.github.thevynex.earthward.selection.SpawnSelectionContractTest | tee ci-output/contracts.log
+      - name: Generate checksum-locked wrapper
+        run: |
+          checksum=$(curl --fail --silent --show-error --location --retry 3 --max-time 90 https://services.gradle.org/distributions/gradle-9.2.1-bin.zip.sha256)
+          [[ "$checksum" =~ ^[a-fA-F0-9]{64}$ ]]
+          gradle --no-daemon --console=plain --max-workers=2 wrapper \
+            --gradle-version 9.2.1 --distribution-type bin \
+            --gradle-distribution-sha256-sum "$checksum" 2>&1 | tee ci-output/wrapper.log
+          chmod +x gradlew
+          ./gradlew --version 2>&1 | tee ci-output/wrapper-version.log
+      - name: Build and Gradle contracts
+        run: ./gradlew --no-daemon --console=plain --max-workers=2 --stacktrace clean contractTest build 2>&1 | tee ci-output/build.log
+      - name: Verify mod JAR
+        run: python3 tools/check_jar.py | tee ci-output/jar.log
+      - name: Upload verified bootstrap JAR
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: earthward-bootstrap-${{ github.sha }}
+          path: |
+            build/libs/earthward-0.1.0-dev.1.jar
+            build/libs/earthward-0.1.0-dev.1.jar.sha256
+          if-no-files-found: error
+          retention-days: 7
+      - name: Upload diagnostic logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: earthward-ci-logs-${{ github.sha }}
+          path: |
+            ci-output/*.log
+            build/reports/
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Record validation boundary
+        if: always()
+        env:
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          {
+            echo '## Earthward CI'
+            printf 'Job status: %s\n\n' "$JOB_STATUS"
+            echo 'See individual steps for executed checks and failures. Skipped steps are NOT passes.'
+            echo 'Minecraft client/mod loading, world creation, saves, geographic accuracy and target-PC performance were NOT tested.'
+            echo 'This is a bootstrap build, not a playable Earth simulation or a public release.'
+          } >> "$GITHUB_STEP_SUMMARY"
