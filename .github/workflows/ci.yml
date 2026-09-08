@@ -27,12 +27,21 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           persist-credentials: false
-      - name: Setup JDK
-        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
-        with:
-          distribution: temurin
-          java-version: '21.0.12.1+1'
-          architecture: x64
+      - name: Install checksum-pinned Temurin JDK
+        run: |
+          jdk_archive="$RUNNER_TEMP/earthward-jdk.tar.gz"
+          jdk_home="$RUNNER_TEMP/earthward-jdk"
+          curl --fail --silent --show-error --location --retry 3 --max-time 300 \
+            'https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.12.1%2B1/OpenJDK21U-jdk_x64_linux_hotspot_21.0.12.1_1.tar.gz' \
+            --output "$jdk_archive"
+          printf '%s  %s\n' 'ce79869e1307ed8ee1e2baa86a412b1eb5b75d10a01006d788a6f968bcfaee94' "$jdk_archive" | sha256sum --check --strict
+          mkdir -p "$jdk_home"
+          tar -xzf "$jdk_archive" --directory "$jdk_home" --strip-components=1
+          "$jdk_home/bin/java" -XshowSettings:properties -version 2>&1 | tee "$RUNNER_TEMP/earthward-jdk-version.log"
+          grep -Eq 'java.runtime.version = 21\.0\.12\.1\+1([[:space:]]|$)' "$RUNNER_TEMP/earthward-jdk-version.log"
+          "$jdk_home/bin/javac" -version
+          printf 'JAVA_HOME=%s\n' "$jdk_home" >> "$GITHUB_ENV"
+          printf '%s/bin\n' "$jdk_home" >> "$GITHUB_PATH"
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a
         with:
