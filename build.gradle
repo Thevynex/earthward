@@ -15,6 +15,9 @@ repositories { mavenCentral() }
 dependencies {
     testImplementation 'org.junit.jupiter:junit-jupiter:5.11.4'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher:1.11.4'
+    // Plain JVM tests do not inherit Minecraft's runtime libraries.
+    // Minecraft supplies Gson in-game; this dependency is test-only, not shaded.
+    testRuntimeOnly 'com.google.code.gson:gson:2.10.1'
 }
 tasks.named('test', Test) { useJUnitPlatform() }
 
