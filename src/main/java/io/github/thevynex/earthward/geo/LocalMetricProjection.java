@@ -32,6 +32,21 @@ public record LocalMetricProjection(double originLatitude, double originLongitud
         return new WorldHorizontalPoint(point.eastMetres(), -point.northMetres());
     }
 
+    /** Inverse of the bounded pilot mapping; it does not implement a worldwide projection. */
+    public GeographicPoint toGeographic(double xMetres, double zMetres) {
+        if (!Double.isFinite(xMetres) || !Double.isFinite(zMetres)) {
+            throw new IllegalArgumentException("Invalid local world coordinate");
+        }
+        double latitude = originLatitude - Math.toDegrees(zMetres / EARTH_RADIUS_METRES);
+        double longitude = originLongitude + Math.toDegrees(
+                xMetres / (EARTH_RADIUS_METRES * Math.cos(Math.toRadians(originLatitude))));
+        if (Math.abs(latitude - originLatitude) > 2 || Math.abs(longitude - originLongitude) > 2) {
+            throw new IllegalArgumentException("World coordinate outside local projection limit");
+        }
+        return new GeographicPoint(latitude, longitude);
+    }
+
     public record MetricPoint(double eastMetres, double northMetres) {}
     public record WorldHorizontalPoint(double xMetres, double zMetres) {}
+    public record GeographicPoint(double latitude, double longitude) {}
 }

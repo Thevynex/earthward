@@ -20,9 +20,16 @@ final class LocalMetricProjectionTest {
     @Test void eastIsPositiveX() {
         assertTrue(PILOT.toWorld(40.9848, 29.03).xMetres() > 0);
     }
+    @Test void inverseRoundTripsPilotCoordinates() {
+        var world = PILOT.toWorld(40.9812, 29.0311);
+        var geographic = PILOT.toGeographic(world.xMetres(), world.zMetres());
+        assertEquals(40.9812, geographic.latitude(), 1e-10);
+        assertEquals(29.0311, geographic.longitude(), 1e-10);
+    }
     @Test void rejectsNonFiniteAndDistantCoordinates() {
         assertThrows(IllegalArgumentException.class, () -> PILOT.project(Double.NaN, 29));
         assertThrows(IllegalArgumentException.class, () -> PILOT.project(50, 29));
+        assertThrows(IllegalArgumentException.class, () -> PILOT.toGeographic(Double.POSITIVE_INFINITY, 0));
     }
     @Test void rejectsPolarOrigin() {
         assertThrows(IllegalArgumentException.class, () -> new LocalMetricProjection(89, 0));
