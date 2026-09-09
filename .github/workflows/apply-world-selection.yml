@@ -1,0 +1,89 @@
+name: Apply Earthward world selection wiring
+on:
+  push:
+    branches: [dev/bootstrap]
+    paths: ['.github/workflows/apply-world-selection.yml']
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Wire selection into persistent generator
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          def edit(path, old, new):
+              p=Path(path); s=p.read_text();
+              if old not in s: raise SystemExit(f'missing pattern in {path}: {old[:80]}')
+              p.write_text(s.replace(old,new))
+          g='src/main/java/io/github/thevynex/earthward/worldgen/EarthwardChunkGenerator.java'
+          edit(g,'Codec.STRING.fieldOf("package_id").forGetter(EarthwardChunkGenerator::packageId)\n    ).apply(instance, EarthwardChunkGenerator::new));','Codec.STRING.fieldOf("package_id").forGetter(EarthwardChunkGenerator::packageId),\n            Codec.INT.fieldOf("requested_spawn_x").forGetter(EarthwardChunkGenerator::requestedSpawnX),\n            Codec.INT.fieldOf("requested_spawn_z").forGetter(EarthwardChunkGenerator::requestedSpawnZ)\n    ).apply(instance, EarthwardChunkGenerator::new));')
+          edit(g,'private final String packageId;\n    private final ChunkPlacementPlanner placementPlanner;','private final String packageId;\n    private final int requestedSpawnX;\n    private final int requestedSpawnZ;\n    private final ChunkPlacementPlanner placementPlanner;')
+          edit(g,'public EarthwardChunkGenerator(BiomeSource biomeSource, Holder<NoiseGeneratorSettings> baseSettings, String packageId) {\n        this(biomeSource, baseSettings, packageId, prepare(packageId));\n    }\n    private EarthwardChunkGenerator(BiomeSource biomeSource, Holder<NoiseGeneratorSettings> baseSettings,\n                                    String packageId, PreparedPackage prepared) {','public EarthwardChunkGenerator(BiomeSource biomeSource, Holder<NoiseGeneratorSettings> baseSettings,\n                                   String packageId, int requestedSpawnX, int requestedSpawnZ) {\n        this(biomeSource, baseSettings, packageId, requestedSpawnX, requestedSpawnZ, prepare(packageId));\n    }\n    private EarthwardChunkGenerator(BiomeSource biomeSource, Holder<NoiseGeneratorSettings> baseSettings,\n                                    String packageId, int requestedSpawnX, int requestedSpawnZ, PreparedPackage prepared) {')
+          edit(g,'this.packageId = packageId;\n        this.placementPlanner = prepared.placementPlanner();','this.packageId = packageId;\n        this.requestedSpawnX = requestedSpawnX;\n        this.requestedSpawnZ = requestedSpawnZ;\n        this.placementPlanner = prepared.placementPlanner();')
+          edit(g,'HolderGetter<NoiseGeneratorSettings> noiseSettings, String packageId) {\n        return new EarthwardChunkGenerator(new FixedBiomeSource(biomes.getOrThrow(Biomes.PLAINS)),\n                noiseSettings.getOrThrow(NoiseGeneratorSettings.OVERWORLD), packageId);','HolderGetter<NoiseGeneratorSettings> noiseSettings, String packageId, int requestedSpawnX, int requestedSpawnZ) {\n        return new EarthwardChunkGenerator(new FixedBiomeSource(biomes.getOrThrow(Biomes.PLAINS)),\n                noiseSettings.getOrThrow(NoiseGeneratorSettings.OVERWORLD), packageId, requestedSpawnX, requestedSpawnZ);')
+          edit(g,'public String packageId() { return packageId; }','public String packageId() { return packageId; }\n    public int requestedSpawnX() { return requestedSpawnX; }\n    public int requestedSpawnZ() { return requestedSpawnZ; }')
+          e='src/main/java/io/github/thevynex/earthward/worldgen/WorldSpawnEvents.java'
+          edit(e,'validator.findNearest(0, 0, SafeSpawnValidator.MAX_RADIUS_METRES)','validator.findNearest(generator.requestedSpawnX(), generator.requestedSpawnZ(), SafeSpawnValidator.MAX_RADIUS_METRES)')
+          l='src/main/java/io/github/thevynex/earthward/client/worldgen/EarthwardWorldCreationLauncher.java'
+          edit(l,'public static void start(String packageId) {','public static void start(String packageId, int requestedSpawnX, int requestedSpawnZ) {')
+          edit(l,'EarthwardChunkGenerator.create(biomes, settings, packageId);','EarthwardChunkGenerator.create(biomes, settings, packageId, requestedSpawnX, requestedSpawnZ);')
+          m='src/main/java/io/github/thevynex/earthward/client/EarthwardMapScreen.java'
+          edit(m,'import io.github.thevynex.earthward.client.map.ProjectedMapModel;','import io.github.thevynex.earthward.client.map.ProjectedMapModel;\nimport io.github.thevynex.earthward.client.worldgen.EarthwardWorldCreationLauncher;')
+          edit(m,'import io.github.thevynex.earthward.geo.GeoGeometry;','import io.github.thevynex.earthward.geo.ChunkGeometryIndex;\nimport io.github.thevynex.earthward.geo.ElevationPackageLoader;\nimport io.github.thevynex.earthward.geo.GeoGeometry;')
+          edit(m,'import io.github.thevynex.earthward.geo.GeoPackageLoader;','import io.github.thevynex.earthward.geo.GeoPackageLoader;\nimport io.github.thevynex.earthward.geo.LocalMetricProjection;\nimport io.github.thevynex.earthward.worldgen.ChunkFeatureRasterizer;\nimport io.github.thevynex.earthward.worldgen.EarthwardChunkGenerator;\nimport io.github.thevynex.earthward.worldgen.PilotTerrainSampler;\nimport io.github.thevynex.earthward.worldgen.SafeSpawnValidator;')
+          edit(m,'private volatile GeoPackageLoader.Inspection inspection;','private volatile GeoPackageLoader.Inspection inspection;\n    private volatile ElevationPackageLoader.Inspection elevationInspection;\n    private volatile SafeSpawnValidator.SafeSpawn safeSpawn;')
+          old='''CompletableFuture.supplyAsync(() -> GeoPackageLoader.inspect(
+                    FMLPaths.GAMEDIR.get().resolve("earthward").resolve("packages"), packageId))
+                    .thenAccept(result -> {
+                        inspection = result;
+                        if (result.status() == GeoPackageLoader.Status.VERIFIED_GEOMETRY_ONLY) {
+                            model = ProjectedMapModel.from(result.geometry());
+                        }
+                        loadFinished = true;
+                    });'''
+          new='''CompletableFuture.runAsync(() -> {
+                var root = FMLPaths.GAMEDIR.get().resolve("earthward").resolve("packages");
+                inspection = GeoPackageLoader.inspect(root, packageId);
+                elevationInspection = ElevationPackageLoader.inspect(root, packageId);
+                if (inspection.status() == GeoPackageLoader.Status.VERIFIED_GEOMETRY_ONLY
+                        && elevationInspection.status() == ElevationPackageLoader.Status.VERIFIED) {
+                    model = ProjectedMapModel.from(inspection.geometry());
+                }
+                loadFinished = true;
+            });'''
+          edit(m,old,new)
+          edit(m,'Component.translatable("earthward.map.create_unavailable"), button -> {})','Component.translatable("earthward.map.create_unavailable"), button -> {\n                    if (safeSpawn != null) EarthwardWorldCreationLauncher.start(packageId,\n                            (int) Math.round(selectedX), (int) Math.round(selectedZ));\n                })')
+          edit(m,'super.render(graphics, mouseX, mouseY, partialTick);\n        drawHud(graphics);','super.render(graphics, mouseX, mouseY, partialTick);\n        if (earthwardCreateButton != null) {\n            earthwardCreateButton.active = safeSpawn != null;\n            earthwardCreateButton.setMessage(Component.literal(safeSpawn == null ? "Güvenli konum seç" : "Earthward dünyasını oluştur"));\n        }\n        drawHud(graphics);')
+          edit(m,'selectedZ = viewport.screenToWorldZ(mouseY, height);\n            return true;','selectedZ = viewport.screenToWorldZ(mouseY, height);\n            validateSelection();\n            return true;')
+          marker='''    private void fitMap() {'''
+          method='''    private void validateSelection() {
+        safeSpawn = null;
+        if (inspection == null || elevationInspection == null || selectedX == null || selectedZ == null) return;
+        int requestedX = (int) Math.round(selectedX), requestedZ = (int) Math.round(selectedZ);
+        CompletableFuture.supplyAsync(() -> {
+            var projection = new LocalMetricProjection(EarthwardChunkGenerator.PILOT_ORIGIN_LATITUDE,
+                    EarthwardChunkGenerator.PILOT_ORIGIN_LONGITUDE);
+            var rasterizer = new ChunkFeatureRasterizer(ChunkGeometryIndex.from(inspection.geometry()));
+            var validator = new SafeSpawnValidator(rasterizer, (x, z) -> {
+                var point = projection.toGeographic(x + 0.5, z + 0.5);
+                return PilotTerrainSampler.SEA_LEVEL_Y + (int) Math.round(
+                        elevationInspection.grid().sampleMetres(point.longitude(), point.latitude()));
+            });
+            return validator.findNearest(requestedX, requestedZ, SafeSpawnValidator.MAX_RADIUS_METRES).orElse(null);
+        }).thenAccept(result -> {
+            if (selectedX != null && selectedZ != null && requestedX == (int) Math.round(selectedX)
+                    && requestedZ == (int) Math.round(selectedZ)) safeSpawn = result;
+        });
+    }
+
+'''+marker
+          edit(m,marker,method)
+          PY
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add src/main/java
+          git commit -m 'feat(client): enable verified map selection and persistent spawn'
+          git push origin HEAD:dev/bootstrap
