@@ -1,0 +1,22 @@
+{
+  "earthward.selection.title": "Earthward — Bölge seçimi",
+  "earthward.selection.preview": "Geliştirme önizlemesi · dünya üretimi kapalı",
+  "earthward.selection.step": "Adım %s / %s. Pilot seçimine devam et.",
+  "earthward.selection.create_unavailable": "Dünya oluşturma kullanılamıyor",
+  "earthward.selection.package_checking": "Yerel coğrafi veri paketi arka planda doğrulanıyor…",
+  "earthward.selection.no_data": "%s için yerel coğrafi veri paketi bulunamadı. Kayıt oluşturulmadı; internetten veri indirilmedi.",
+  "earthward.selection.invalid_package": "%s paketi eksik, değiştirilmiş veya desteklenmiyor. Paket kullanılmadı ve kayıtlara dokunulmadı.",
+  "earthward.selection.package_verified": "%s doğrulandı: %s bina dış çizgisi, %s yol merkez çizgisi ve %s koordinat noktası. Yükseklik, güvenli doğuş ve dünya üreticisi henüz yok; dünya oluşturulamaz.",
+  "earthward.selection.invalid_catalog": "Seçim kataloğu eksik veya bozuk. Kayıtlara dokunulmadı.",
+  "earthward.map.title": "Earthward — Gerçek bölge haritası",
+  "earthward.map.pilot": "Türkiye / İstanbul / Kadıköy / Caferağa",
+  "earthward.map.loading": "Yerel paket doğrulanıyor ve harita hazırlanıyor…",
+  "earthward.map.invalid": "%s paketi geçersiz veya değiştirilmiş; kullanılmadı.",
+  "earthward.map.missing": "%s paketi bulunamadı. Birleşik test paketini doğru oyun dizinine çıkar.",
+  "earthward.map.ready": "%s bina dış çizgisi, %s yol merkez çizgisi, %s nokta. Turuncu: bina; açık renk: yol.",
+  "earthward.map.controls": "Sürükle: kaydır · Tekerlek/+−: zoom · Tıkla: istenen doğuş",
+  "earthward.map.requested_spawn": "İstenen yatay konum: X %s m, Z %s m — henüz güvenli doğuş değil",
+  "earthward.map.fit": "Haritayı sığdır",
+  "earthward.map.create_unavailable": "Earthward dünyası henüz kullanılamıyor",
+  "earthward.map.classic": "Klasik dünya oluşturma"
+}

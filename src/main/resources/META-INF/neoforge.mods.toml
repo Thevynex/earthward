@@ -1,0 +1,24 @@
+modLoader="javafml"
+loaderVersion="[1,)"
+license="All Rights Reserved; see LICENSE"
+
+[[mods]]
+modId="earthward"
+version="0.1.0-dev.1"
+displayName="Earthward"
+authors="Thevynex"
+description="NeoForge bootstrap only. Real-world generation and map selection are not implemented."
+
+[[dependencies.earthward]]
+modId="neoforge"
+type="required"
+versionRange="[21.1.249]"
+ordering="NONE"
+side="BOTH"
+
+[[dependencies.earthward]]
+modId="minecraft"
+type="required"
+versionRange="[1.21.1]"
+ordering="NONE"
+side="BOTH"

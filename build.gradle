@@ -1,0 +1,56 @@
+plugins {
+    id 'java-library'
+    id 'net.neoforged.moddev' version '2.0.146'
+}
+
+if (gradle.gradleVersion != '9.2.1') {
+    throw new GradleException('Earthward requires Gradle 9.2.1')
+}
+version = mod_version
+group = mod_group_id
+base { archivesName = mod_id }
+java.toolchain.languageVersion = JavaLanguageVersion.of(21)
+
+repositories { mavenCentral() }
+dependencies {
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.11.4'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher:1.11.4'
+    // Plain JVM tests do not inherit Minecraft's runtime libraries.
+    // Minecraft supplies Gson in-game; this dependency is test-only, not shaded.
+    testRuntimeOnly 'com.google.code.gson:gson:2.10.1'
+}
+tasks.named('test', Test) { useJUnitPlatform() }
+
+neoForge {
+    version = project.neo_version
+    runs {
+        client { client() }
+    }
+    mods {
+        "${mod_id}" { sourceSet(sourceSets.main) }
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.release = 21
+}
+
+tasks.register('contractTest', JavaExec) {
+    dependsOn tasks.named('testClasses')
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'io.github.thevynex.earthward.selection.SpawnSelectionContractTest'
+    javaLauncher = javaToolchains.launcherFor {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+tasks.named('check') { dependsOn tasks.named('contractTest') }
+tasks.named('jar') {
+    from('LICENSE')
+    from('TEMPLATE_LICENSE.txt')
+    from('THIRD_PARTY_NOTICES.md')
+}
+tasks.named('wrapper', Wrapper) {
+    gradleVersion = '9.2.1'
+    distributionType = Wrapper.DistributionType.BIN
+}

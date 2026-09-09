@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "region_id": "tr_istanbul_kadikoy_caferaga",
+  "kind": "planning_catalog_not_geographic_data",
+  "levels": [
+    {"label": "Ülke", "name": "Türkiye"},
+    {"label": "İl", "name": "İstanbul"},
+    {"label": "İlçe", "name": "Kadıköy"},
+    {"label": "Mahalle", "name": "Caferağa"}
+  ]
+}

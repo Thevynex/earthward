@@ -1,0 +1,22 @@
+{
+  "earthward.selection.title": "Earthward — Region selection",
+  "earthward.selection.preview": "Development preview · world generation disabled",
+  "earthward.selection.step": "Step %s / %s. Continue to the pilot selection.",
+  "earthward.selection.create_unavailable": "World creation unavailable",
+  "earthward.selection.package_checking": "Validating the local geographic package in the background…",
+  "earthward.selection.no_data": "No local geographic package exists for %s. No save was created and no data was downloaded.",
+  "earthward.selection.invalid_package": "The %s package is incomplete, modified, or unsupported. It was not used and saves were not changed.",
+  "earthward.selection.package_verified": "%s verified: %s building outlines, %s road centerlines, and %s coordinate points. Elevation, safe spawn, and the world generator are still missing, so a world cannot be created.",
+  "earthward.selection.invalid_catalog": "Selection catalog missing or invalid. Existing saves were not changed.",
+  "earthward.map.title": "Earthward — Real region map",
+  "earthward.map.pilot": "Türkiye / İstanbul / Kadıköy / Caferağa",
+  "earthward.map.loading": "Validating the local package and preparing the map…",
+  "earthward.map.invalid": "Package %s is invalid or modified and was not used.",
+  "earthward.map.missing": "Package %s is missing. Extract the combined test bundle into the correct game directory.",
+  "earthward.map.ready": "%s building outlines, %s road centerlines, %s points. Orange: buildings; light: roads.",
+  "earthward.map.controls": "Drag: pan · Wheel/+−: zoom · Click: requested spawn",
+  "earthward.map.requested_spawn": "Requested horizontal position: X %s m, Z %s m — not yet a safe spawn",
+  "earthward.map.fit": "Fit map",
+  "earthward.map.create_unavailable": "Earthward world not available yet",
+  "earthward.map.classic": "Classic world creation"
+}

@@ -1,0 +1,37 @@
+name: Deliver world launch fix JAR
+on:
+  push:
+    branches: [dev/bootstrap]
+    paths: ['.github/workflows/deliver-world-launch-fix.yml']
+permissions:
+  contents: write
+jobs:
+  deliver:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - run: bash tools/install_jdk.sh
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a
+        with:
+          gradle-version: '9.2.1'
+          cache-disabled: true
+          dependency-graph: disabled
+          build-scan-publish: false
+      - run: |
+          checksum=$(curl --fail --silent --show-error --location --retry 3 --max-time 90 https://services.gradle.org/distributions/gradle-9.2.1-bin.zip.sha256)
+          gradle --no-daemon --console=plain --max-workers=2 wrapper --gradle-version 9.2.1 --distribution-type bin --gradle-distribution-sha256-sum "$checksum"
+          chmod +x gradlew
+          bash tools/ci_build.sh
+          python3 tools/check_jar.py
+      - run: |
+          mkdir -p delivery
+          cp build/libs/earthward-0.1.0-dev.1.jar delivery/earthward-0.1.0-dev.1-world-launch-fix.jar
+          sha256sum delivery/earthward-0.1.0-dev.1-world-launch-fix.jar > delivery/world-launch-fix.sha256
+          base64 -w0 delivery/earthward-0.1.0-dev.1-world-launch-fix.jar > delivery/world-launch-fix.jar.b64
+          rm delivery/earthward-0.1.0-dev.1-world-launch-fix.jar
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add delivery
+          git commit -m 'ci: stage world-launch fix transfer [skip ci]'
+          git push origin HEAD:dev/bootstrap
