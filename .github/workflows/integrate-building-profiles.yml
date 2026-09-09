@@ -1,0 +1,56 @@
+name: Integrate cross-chunk building profiles
+on:
+  push:
+    branches: [dev/bootstrap]
+    paths: ['.github/workflows/integrate-building-profiles.yml']
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('src/main/java/io/github/thevynex/earthward/worldgen/ChunkPlacementPlanner.java');s=p.read_text()
+          s=s.replace('private final ChunkFeatureRasterizer rasterizer;','private final ChunkFeatureRasterizer rasterizer;\n    private final BuildingProfileIndex profiles;')
+          s=s.replace('''public ChunkPlacementPlanner(ChunkFeatureRasterizer rasterizer) {
+        if (rasterizer == null) throw new IllegalArgumentException("Rasterizer required");
+        this.rasterizer = rasterizer;
+    }''','''public ChunkPlacementPlanner(ChunkFeatureRasterizer rasterizer) { this(rasterizer, null); }
+    public ChunkPlacementPlanner(ChunkFeatureRasterizer rasterizer, BuildingProfileIndex profiles) {
+        if (rasterizer == null) throw new IllegalArgumentException("Rasterizer required");
+        this.rasterizer = rasterizer;
+        this.profiles = profiles;
+    }''')
+          s=s.replace('''int base=buildingBase[index];
+                for (int y=surface; y<=base; y++)''','''String buildingId=center.buildingIdAt(localX,localZ);
+                BuildingProfileIndex.Profile profile=profiles==null?null:profiles.require(buildingId);
+                int base=profile==null?buildingBase[index]:profile.baseY();
+                int wallHeight=profile==null?INFERRED_WALL_HEIGHT:profile.wallHeight();
+                for (int y=Math.min(surface,base); y<=base; y++)''')
+          s=s.replace('for (int y=1; y<=INFERRED_WALL_HEIGHT; y++) {\n                        boolean window=(y==2||y==3||y==6||y==7)&&windowCell(worldX,worldZ);','for (int y=1; y<=wallHeight; y++) {\n                        boolean window=(y%3==2||y%3==0)&&windowCell(worldX,worldZ);')
+          s=s.replace('base+INFERRED_WALL_HEIGHT+1,worldZ,Material.ROOF','base+wallHeight+1,worldZ,Material.ROOF')
+          if 'profiles.require(buildingId)' not in s: raise SystemExit('planner integration failed')
+          p.write_text(s)
+          g=Path('src/main/java/io/github/thevynex/earthward/worldgen/EarthwardChunkGenerator.java');s=g.read_text()
+          old='''return new PreparedPackage(elevation.grid(), new ChunkPlacementPlanner(
+                new ChunkFeatureRasterizer(ChunkGeometryIndex.from(geometry.geometry()))));'''
+          new='''var index = ChunkGeometryIndex.from(geometry.geometry());
+        var rasterizer = new ChunkFeatureRasterizer(index);
+        var projection = new LocalMetricProjection(PILOT_ORIGIN_LATITUDE, PILOT_ORIGIN_LONGITUDE);
+        var profiles = new BuildingProfileIndex(index, (x, z) -> {
+            var coordinate = projection.toGeographic(x + 0.5, z + 0.5);
+            return PilotTerrainSampler.SEA_LEVEL_Y + (int) Math.round(
+                    elevation.grid().sampleMetres(coordinate.longitude(), coordinate.latitude()));
+        });
+        return new PreparedPackage(elevation.grid(), new ChunkPlacementPlanner(rasterizer, profiles));'''
+          if old not in s: raise SystemExit('generator prepare pattern missing')
+          g.write_text(s.replace(old,new))
+          PY
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add src/main/java
+          git commit -m 'feat(worldgen): use stable region-wide building base and height'
+          git push origin HEAD:dev/bootstrap
