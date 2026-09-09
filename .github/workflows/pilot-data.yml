@@ -15,6 +15,7 @@ on:
       - 'tools/prepare_pilot.py'
       - 'tools/test_prepare_pilot.py'
       - 'data/pilot_area.json'
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -27,7 +28,7 @@ jobs:
   pilot:
     name: Validate and prepare pilot geometry
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 45
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -38,11 +39,71 @@ jobs:
           python3 --version
           python3 -m unittest discover -s tools -p 'test_prepare_pilot.py' -v
       - name: Fetch one bounded real geometry extract
-        if: github.event_name == 'push' && github.ref == 'refs/heads/dev/bootstrap'
+        if: github.event_name != 'pull_request'
         timeout-minutes: 2
         run: python3 tools/prepare_pilot.py --area data/pilot_area.json --output pilot-output --fetch
-      - name: Upload ODbL geometry package, not a world or mod
-        if: github.event_name == 'push' && github.ref == 'refs/heads/dev/bootstrap'
+      - name: Install checksum-pinned Temurin JDK
+        if: github.event_name != 'pull_request'
+        run: bash tools/install_jdk.sh
+      - name: Setup Gradle
+        if: github.event_name != 'pull_request'
+        uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a
+        with:
+          gradle-version: '9.2.1'
+          cache-disabled: true
+          dependency-graph: disabled
+          build-scan-publish: false
+      - name: Generate checksum-locked wrapper
+        if: github.event_name != 'pull_request'
+        run: |
+          checksum=$(curl --fail --silent --show-error --location --retry 3 --max-time 90 https://services.gradle.org/distributions/gradle-9.2.1-bin.zip.sha256)
+          [[ "$checksum" =~ ^[a-fA-F0-9]{64}$ ]]
+          gradle --no-daemon --console=plain --max-workers=2 wrapper \
+            --gradle-version 9.2.1 --distribution-type bin \
+            --gradle-distribution-sha256-sum "$checksum"
+          chmod +x gradlew
+      - name: Build and verify matching mod JAR
+        if: github.event_name != 'pull_request'
+        run: |
+          bash tools/ci_build.sh
+          python3 tools/check_jar.py
+      - name: Stage one-directory test installation
+        if: github.event_name != 'pull_request'
+        run: |
+          package_id=$(python3 -c 'import json; print(json.load(open("data/pilot_area.json"))["package_id"])')
+          [[ "$package_id" =~ ^[a-z][a-z0-9_-]{0,63}$ ]]
+          mkdir -p "test-bundle/mods" "test-bundle/earthward/packages/$package_id"
+          cp build/libs/earthward-0.1.0-dev.1.jar test-bundle/mods/
+          cp build/libs/earthward-0.1.0-dev.1.jar.sha256 test-bundle/mods/
+          cp -R pilot-output/. "test-bundle/earthward/packages/$package_id/"
+          cat > test-bundle/INSTALL.txt <<'EOF'
+          EARTHWARD DEVELOPMENT TEST BUNDLE — NOT A RELEASE
+
+          Target: Minecraft Java 1.21.1, NeoForge 21.1.249, Java 21.
+          Copy the CONTENTS of this folder into a new, isolated Minecraft game directory.
+          This places the JAR under mods/ and the ODbL pilot geometry under earthward/packages/.
+
+          The mod can validate the geometry package, but terrain, roads/buildings in-world,
+          safe spawn, interiors, NPCs, gameplay and performance are NOT implemented yet.
+          Existing saves must not be used for testing this development bundle.
+
+          OSM-derived geometry is © OpenStreetMap contributors and ODbL-1.0.
+          See earthward/packages/tr_istanbul_kadikoy_caferaga/ATTRIBUTION.txt.
+          EOF
+          (
+            cd test-bundle
+            find . -type f ! -name SHA256SUMS.txt -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS.txt
+          )
+      - name: Upload combined development test bundle
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: earthward-test-bundle-${{ github.sha }}
+          path: test-bundle/
+          if-no-files-found: error
+          retention-days: 7
+      - name: Upload separate ODbL geometry package
+        if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: earthward-pilot-geometry-${{ github.sha }}
@@ -53,10 +114,10 @@ jobs:
         if: always()
         run: |
           {
-            echo '## Pilot geometry, not generated terrain'
-            echo 'Unit tests use synthetic fixtures. Real acquisition runs only on dev/bootstrap push.'
-            echo 'Check step outcomes: skipped is not passed. No automatic request retries.'
-            echo 'A successful package contains ODbL geometry, attribution, source snapshot and hashes.'
-            echo 'It does not establish source accuracy, full coverage, game loading, terrain, spawn or performance.'
+            echo '## Development test bundle, not generated terrain'
+            echo 'Unit tests use synthetic fixtures. Real acquisition/build/bundle steps run on dev/bootstrap push or manual dispatch, not pull_request.'
+            echo 'Check individual step outcomes: skipped is not passed. No automatic Overpass request retries.'
+            echo 'A successful combined artifact contains a checked mod JAR plus ODbL pilot geometry in their expected game-directory paths.'
+            echo 'It does not establish game loading, source accuracy, full coverage, terrain, spawn, gameplay or performance.'
             echo 'No raster tiles, paid services, personal credentials or runtime game downloads are used.'
           } >> "$GITHUB_STEP_SUMMARY"
