@@ -1,24 +1,21 @@
 package io.github.thevynex.earthward.worldgen;
 
-import com.mojang.serialization.DataResult;
-import com.mojang.serialization.DynamicOps;
+import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
-import com.mojang.serialization.MapLike;
-import com.mojang.serialization.RecordBuilder;
+import com.mojang.serialization.codecs.RecordCodecBuilder;
 import io.github.thevynex.earthward.geo.ElevationPackageLoader;
 import io.github.thevynex.earthward.geo.LocalMetricProjection;
-import java.util.Optional;
-import java.util.stream.Stream;
 import net.minecraft.core.Holder;
 import net.minecraft.core.HolderGetter;
 import net.minecraft.core.RegistryAccess;
-import net.minecraft.core.registries.Registries;
-import net.minecraft.resources.RegistryOps;
 import net.minecraft.world.level.StructureManager;
+import net.minecraft.world.level.biome.Biome;
+import net.minecraft.world.level.biome.BiomeSource;
+import net.minecraft.world.level.biome.Biomes;
+import net.minecraft.world.level.biome.FixedBiomeSource;
 import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.chunk.ChunkGenerator;
 import net.minecraft.world.level.chunk.ChunkGeneratorStructureState;
-import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.levelgen.NoiseBasedChunkGenerator;
 import net.minecraft.world.level.levelgen.NoiseGeneratorSettings;
 import net.minecraft.world.level.levelgen.NoiseRouter;
@@ -30,36 +27,25 @@ public final class EarthwardChunkGenerator extends NoiseBasedChunkGenerator {
     public static final double PILOT_ORIGIN_LATITUDE = 40.9848;
     public static final double PILOT_ORIGIN_LONGITUDE = 29.0268;
 
-    public static final MapCodec<EarthwardChunkGenerator> CODEC = new MapCodec<>() {
-        @Override public <T> DataResult<EarthwardChunkGenerator> decode(DynamicOps<T> ops, MapLike<T> input) {
-            T value = input.get("package_id");
-            if (value == null) return DataResult.error(() -> "Earthward package_id is required");
-            Optional<String> packageId = ops.getStringValue(value).result();
-            if (packageId.isEmpty() || !(ops instanceof RegistryOps<?> registries)) {
-                return DataResult.error(() -> "Earthward generator requires package_id and RegistryOps");
-            }
-            var biomes = registries.getter(Registries.BIOME);
-            var noise = registries.getter(Registries.NOISE_SETTINGS);
-            if (biomes.isEmpty() || noise.isEmpty()) return DataResult.error(() -> "Missing worldgen registries");
-            try {
-                return DataResult.success(new EarthwardChunkGenerator(biomes.get(), noise.get(), packageId.get()));
-            } catch (RuntimeException error) {
-                return DataResult.error(() -> "Cannot load Earthward elevation package: " + error.getMessage());
-            }
-        }
-        @Override public <T> Stream<T> keys(DynamicOps<T> ops) { return Stream.of(ops.createString("package_id")); }
-        @Override public <T> RecordBuilder<T> encode(EarthwardChunkGenerator generator, DynamicOps<T> ops, RecordBuilder<T> prefix) {
-            return prefix.add("package_id", ops.createString(generator.packageId));
-        }
-    };
+    public static final MapCodec<EarthwardChunkGenerator> CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
+            BiomeSource.CODEC.fieldOf("biome_source").forGetter(EarthwardChunkGenerator::getBiomeSource),
+            NoiseGeneratorSettings.CODEC.fieldOf("settings").forGetter(EarthwardChunkGenerator::generatorSettings),
+            Codec.STRING.fieldOf("package_id").forGetter(EarthwardChunkGenerator::packageId)
+    ).apply(instance, EarthwardChunkGenerator::new));
 
     private final String packageId;
 
-    public EarthwardChunkGenerator(HolderGetter<Biome> biomes,
-                                   HolderGetter<NoiseGeneratorSettings> noiseSettings,
+    public EarthwardChunkGenerator(BiomeSource biomeSource, Holder<NoiseGeneratorSettings> baseSettings,
                                    String packageId) {
-        super(new PilotBiomeSource(biomes), Holder.direct(settings(noiseSettings, load(packageId))));
+        super(biomeSource, Holder.direct(settings(baseSettings.value(), load(packageId))));
         this.packageId = packageId;
+    }
+
+    public static EarthwardChunkGenerator create(HolderGetter<Biome> biomes,
+                                                  HolderGetter<NoiseGeneratorSettings> noiseSettings,
+                                                  String packageId) {
+        return new EarthwardChunkGenerator(new FixedBiomeSource(biomes.getOrThrow(Biomes.PLAINS)),
+                noiseSettings.getOrThrow(NoiseGeneratorSettings.OVERWORLD), packageId);
     }
 
     private static io.github.thevynex.earthward.geo.ElevationGrid load(String packageId) {
@@ -71,9 +57,8 @@ public final class EarthwardChunkGenerator extends NoiseBasedChunkGenerator {
         return inspection.grid();
     }
 
-    private static NoiseGeneratorSettings settings(HolderGetter<NoiseGeneratorSettings> noiseSettings,
+    private static NoiseGeneratorSettings settings(NoiseGeneratorSettings vanilla,
                                                     io.github.thevynex.earthward.geo.ElevationGrid elevation) {
-        NoiseGeneratorSettings vanilla = noiseSettings.getOrThrow(NoiseGeneratorSettings.OVERWORLD).value();
         NoiseRouter router = vanilla.noiseRouter();
         var density = new PilotDensityFunction(elevation,
                 new LocalMetricProjection(PILOT_ORIGIN_LATITUDE, PILOT_ORIGIN_LONGITUDE));
