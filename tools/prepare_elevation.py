@@ -53,14 +53,14 @@ def build_grid(values, bounds, transform):
 
 
 def prepare(source, area, output, acquired_at):
-    from rasterio import open as raster_open
-    from rasterio.windows import from_bounds
     package_id, (south, west, north, east) = validate_area(area)
     source = Path(source); output = Path(output)
     if output.exists():
         raise FileExistsError('Refusing to overwrite elevation package')
     if not source.is_file() or source.stat().st_size <= 0 or source.stat().st_size > MAX_SOURCE_BYTES:
         raise ValueError('Invalid source size')
+    from rasterio import open as raster_open
+    from rasterio.windows import from_bounds
     with raster_open(source) as dataset:
         if dataset.crs is None or dataset.crs.to_epsg() != 4326 or dataset.count != 1:
             raise ValueError('Unexpected source raster layout')
