@@ -3,11 +3,12 @@ package io.github.thevynex.earthward.worldgen;
 import io.github.thevynex.earthward.geo.ChunkGeometryIndex;
 import io.github.thevynex.earthward.geo.GeoGeometry;
 import java.util.Arrays;
+import java.util.EnumSet;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 final class ChunkPlacementPlannerTest {
-    @Test void createsRoadAndBuildingShellPlacementsAboveTerrain() {
+    @Test void createsRoadBuildingFacadeAndStreetPlacements() {
         var geometry = GeoGeometry.parse("""
                 {"schema_version":1,"crs":"EPSG:4326","features":[
                 {"id":"osm:way:1","layers":["building_outline"],"coordinates_lon_lat":[
@@ -17,13 +18,18 @@ final class ChunkPlacementPlannerTest {
                 """);
         var planner = new ChunkPlacementPlanner(new ChunkFeatureRasterizer(ChunkGeometryIndex.from(geometry)));
         int[] heights = new int[256]; Arrays.fill(heights, 70);
-        int road = 0, foundation = 0, wall = 0, roof = 0;
+        var found = EnumSet.noneOf(ChunkPlacementPlanner.Material.class);
         for (int x = -1; x <= 0; x++) for (int z = -1; z <= 0; z++) {
-            for (var placement : planner.plan(x, z, heights).placements()) switch (placement.material()) {
-                case ROAD -> road++; case FOUNDATION -> foundation++; case WALL -> wall++; case ROOF -> roof++;
-            }
+            var plan = planner.plan(x, z, heights);
+            assertTrue(plan.facadePatternInferred());
+            plan.placements().forEach(placement -> found.add(placement.material()));
         }
-        assertTrue(road > 0 && foundation > 0 && wall > 0 && roof > 0);
+        assertTrue(found.contains(ChunkPlacementPlanner.Material.ROAD));
+        assertTrue(found.contains(ChunkPlacementPlanner.Material.SIDEWALK));
+        assertTrue(found.contains(ChunkPlacementPlanner.Material.FOUNDATION));
+        assertTrue(found.contains(ChunkPlacementPlanner.Material.WALL));
+        assertTrue(found.contains(ChunkPlacementPlanner.Material.WINDOW));
+        assertTrue(found.contains(ChunkPlacementPlanner.Material.ROOF));
     }
 
     @Test void rejectsMissingTerrainAndReturnsImmutablePlan() {

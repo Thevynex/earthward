@@ -35,7 +35,6 @@ import net.neoforged.fml.loading.FMLPaths;
 public final class EarthwardChunkGenerator extends NoiseBasedChunkGenerator {
     public static final double PILOT_ORIGIN_LATITUDE = 40.9848;
     public static final double PILOT_ORIGIN_LONGITUDE = 29.0268;
-
     public static final MapCodec<EarthwardChunkGenerator> CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
             BiomeSource.CODEC.fieldOf("biome_source").forGetter(EarthwardChunkGenerator::getBiomeSource),
             NoiseGeneratorSettings.CODEC.fieldOf("settings").forGetter(EarthwardChunkGenerator::generatorSettings),
@@ -45,43 +44,32 @@ public final class EarthwardChunkGenerator extends NoiseBasedChunkGenerator {
     private final String packageId;
     private final ChunkPlacementPlanner placementPlanner;
 
-    public EarthwardChunkGenerator(BiomeSource biomeSource, Holder<NoiseGeneratorSettings> baseSettings,
-                                   String packageId) {
+    public EarthwardChunkGenerator(BiomeSource biomeSource, Holder<NoiseGeneratorSettings> baseSettings, String packageId) {
         this(biomeSource, baseSettings, packageId, prepare(packageId));
     }
-
     private EarthwardChunkGenerator(BiomeSource biomeSource, Holder<NoiseGeneratorSettings> baseSettings,
                                     String packageId, PreparedPackage prepared) {
         super(biomeSource, Holder.direct(settings(baseSettings.value(), prepared.elevation())));
         this.packageId = packageId;
         this.placementPlanner = prepared.placementPlanner();
     }
-
     public static EarthwardChunkGenerator create(HolderGetter<Biome> biomes,
-                                                  HolderGetter<NoiseGeneratorSettings> noiseSettings,
-                                                  String packageId) {
+                                                  HolderGetter<NoiseGeneratorSettings> noiseSettings, String packageId) {
         return new EarthwardChunkGenerator(new FixedBiomeSource(biomes.getOrThrow(Biomes.PLAINS)),
                 noiseSettings.getOrThrow(NoiseGeneratorSettings.OVERWORLD), packageId);
     }
-
     private static PreparedPackage prepare(String packageId) {
         var root = FMLPaths.GAMEDIR.get().resolve("earthward").resolve("packages");
         var elevation = ElevationPackageLoader.inspect(root, packageId);
-        if (elevation.status() != ElevationPackageLoader.Status.VERIFIED) {
-            throw new IllegalArgumentException("Elevation package is not verified: " + elevation.detail());
-        }
+        if (elevation.status() != ElevationPackageLoader.Status.VERIFIED) throw new IllegalArgumentException("Elevation package is not verified: " + elevation.detail());
         var geometry = GeoPackageLoader.inspect(root, packageId);
-        if (geometry.status() != GeoPackageLoader.Status.VERIFIED_GEOMETRY_ONLY) {
-            throw new IllegalArgumentException("Geometry package is not verified: " + geometry.detail());
-        }
+        if (geometry.status() != GeoPackageLoader.Status.VERIFIED_GEOMETRY_ONLY) throw new IllegalArgumentException("Geometry package is not verified: " + geometry.detail());
         var rasterizer = new ChunkFeatureRasterizer(ChunkGeometryIndex.from(geometry.geometry()));
         return new PreparedPackage(elevation.grid(), new ChunkPlacementPlanner(rasterizer));
     }
-
     private static NoiseGeneratorSettings settings(NoiseGeneratorSettings vanilla, ElevationGrid elevation) {
         NoiseRouter router = vanilla.noiseRouter();
-        var density = new PilotDensityFunction(elevation,
-                new LocalMetricProjection(PILOT_ORIGIN_LATITUDE, PILOT_ORIGIN_LONGITUDE));
+        var density = new PilotDensityFunction(elevation, new LocalMetricProjection(PILOT_ORIGIN_LATITUDE, PILOT_ORIGIN_LONGITUDE));
         NoiseRouter replacement = new NoiseRouter(router.barrierNoise(), router.fluidLevelFloodednessNoise(),
                 router.fluidLevelSpreadNoise(), router.lavaNoise(), router.temperature(), router.vegetation(),
                 router.continents(), router.erosion(), router.depth(), router.ridges(),
@@ -90,41 +78,34 @@ public final class EarthwardChunkGenerator extends NoiseBasedChunkGenerator {
                 replacement, vanilla.surfaceRule(), vanilla.spawnTarget(), PilotTerrainSampler.SEA_LEVEL_Y,
                 vanilla.disableMobGeneration(), false, vanilla.oreVeinsEnabled(), vanilla.useLegacyRandomSource());
     }
-
     @Override public void createStructures(RegistryAccess registryAccess, ChunkGeneratorStructureState structureState,
                                            StructureManager structureManager, ChunkAccess chunk,
-                                           StructureTemplateManager structureTemplateManager) {
-        // Vanilla structures are deliberately disabled in the bounded real-world pilot.
-    }
-
-    @Override public void applyBiomeDecoration(WorldGenLevel level, ChunkAccess chunk,
-                                               StructureManager structureManager) {
+                                           StructureTemplateManager structureTemplateManager) {}
+    @Override public void applyBiomeDecoration(WorldGenLevel level, ChunkAccess chunk, StructureManager structureManager) {
         ChunkPos chunkPos = chunk.getPos();
         int[] surfaces = new int[256];
         for (int localZ = 0; localZ < 16; localZ++) for (int localX = 0; localX < 16; localX++) {
             surfaces[localZ * 16 + localX] = chunk.getHeight(Heightmap.Types.WORLD_SURFACE_WG, localX, localZ) - 1;
         }
         var plan = placementPlanner.plan(chunkPos.x, chunkPos.z, surfaces);
-        int minimumY = chunk.getMinBuildHeight();
-        int maximumY = minimumY + chunk.getHeight() - 1;
+        int minimumY = chunk.getMinBuildHeight(), maximumY = minimumY + chunk.getHeight() - 1;
         for (var placement : plan.placements()) {
             if (placement.y() < minimumY || placement.y() > maximumY) continue;
-            chunk.setBlockState(new BlockPos(placement.x(), placement.y(), placement.z()),
-                    blockFor(placement.material()), false);
+            chunk.setBlockState(new BlockPos(placement.x(), placement.y(), placement.z()), blockFor(placement.material()), false);
         }
     }
-
     private static BlockState blockFor(ChunkPlacementPlanner.Material material) {
         return switch (material) {
             case ROAD -> Blocks.GRAY_CONCRETE.defaultBlockState();
-            case FOUNDATION -> Blocks.SMOOTH_STONE.defaultBlockState();
+            case SIDEWALK, FOUNDATION -> Blocks.SMOOTH_STONE.defaultBlockState();
             case WALL -> Blocks.BRICKS.defaultBlockState();
+            case WINDOW -> Blocks.LIGHT_BLUE_STAINED_GLASS.defaultBlockState();
             case ROOF -> Blocks.LIGHT_GRAY_CONCRETE.defaultBlockState();
+            case LAMP_POST -> Blocks.IRON_BARS.defaultBlockState();
+            case LAMP -> Blocks.SEA_LANTERN.defaultBlockState();
         };
     }
-
     public String packageId() { return packageId; }
     @Override protected MapCodec<? extends ChunkGenerator> codec() { return CODEC; }
-
     private record PreparedPackage(ElevationGrid elevation, ChunkPlacementPlanner placementPlanner) {}
 }
