@@ -8,6 +8,7 @@ on:
       - 'tools/prepare_pilot.py'
       - 'tools/test_prepare_pilot.py'
       - 'data/pilot_area.json'
+      - 'data/BUNDLE_VERSION'
   pull_request:
     branches: [main]
     paths:
@@ -15,6 +16,7 @@ on:
       - 'tools/prepare_pilot.py'
       - 'tools/test_prepare_pilot.py'
       - 'data/pilot_area.json'
+      - 'data/BUNDLE_VERSION'
   workflow_dispatch:
 
 permissions:
@@ -83,8 +85,9 @@ jobs:
           Copy the CONTENTS of this folder into a new, isolated Minecraft game directory.
           This places the JAR under mods/ and the ODbL pilot geometry under earthward/packages/.
 
-          The mod can validate the geometry package, but terrain, roads/buildings in-world,
-          safe spawn, interiors, NPCs, gameplay and performance are NOT implemented yet.
+          The fresh vanilla Create World flow is replaced by a full-screen pannable/zoomable
+          vector pilot map. Earthward world creation remains disabled: terrain, safe spawn,
+          interiors, NPCs, gameplay and performance are NOT implemented yet.
           Existing saves must not be used for testing this development bundle.
 
           OSM-derived geometry is © OpenStreetMap contributors and ODbL-1.0.
