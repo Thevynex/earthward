@@ -81,7 +81,7 @@ public final class EarthwardChunkGenerator extends NoiseBasedChunkGenerator {
                 router.fluidLevelSpreadNoise(), router.lavaNoise(), router.temperature(), router.vegetation(),
                 router.continents(), router.erosion(), router.depth(), router.ridges(),
                 router.initialDensityWithoutJaggedness(), density, router.veinToggle(), router.veinRidged(), router.veinGap());
-        return new NoiseGeneratorSettings(vanilla.noiseSettings(), vanilla.defaultBlock(), vanilla.defaultFluid(),
+        return new NoiseGeneratorSettings(vanilla.noiseSettings(), vanilla.defaultBlock(), Blocks.AIR.defaultBlockState(),
                 replacement, vanilla.surfaceRule(), vanilla.spawnTarget(), PilotTerrainSampler.SEA_LEVEL_Y,
                 vanilla.disableMobGeneration(), false, vanilla.oreVeinsEnabled(), vanilla.useLegacyRandomSource());
     }
