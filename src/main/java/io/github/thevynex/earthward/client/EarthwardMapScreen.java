@@ -2,6 +2,7 @@ package io.github.thevynex.earthward.client;
 
 import io.github.thevynex.earthward.client.map.MapViewport;
 import io.github.thevynex.earthward.client.map.ProjectedMapModel;
+import io.github.thevynex.earthward.client.worldgen.EarthwardWorldCreationLauncher;
 import io.github.thevynex.earthward.geo.GeoGeometry;
 import io.github.thevynex.earthward.geo.GeoPackageLoader;
 import io.github.thevynex.earthward.selection.SelectionCatalog;
@@ -33,6 +34,7 @@ public final class EarthwardMapScreen extends Screen {
     private Double selectedX;
     private Double selectedZ;
     private Button earthwardCreateButton;
+    private boolean spawnSelected;
 
     public EarthwardMapScreen(Screen parent) {
         super(Component.translatable("earthward.map.title"));
@@ -70,7 +72,10 @@ public final class EarthwardMapScreen extends Screen {
                 .bounds(width - 96, pad + 68, 84, 20).build());
 
         earthwardCreateButton = addRenderableWidget(Button.builder(
-                Component.translatable("earthward.map.create_unavailable"), button -> {})
+                Component.literal("Güvenli konum seç"), button -> {
+                    if (spawnSelected) EarthwardWorldCreationLauncher.start(packageId,
+                            (int)Math.round(selectedX), (int)Math.round(selectedZ));
+                })
                 .bounds(pad, height - 84, 210, 20).build());
         earthwardCreateButton.active = false;
         addRenderableWidget(Button.builder(Component.translatable("earthward.map.classic"),
@@ -90,6 +95,10 @@ public final class EarthwardMapScreen extends Screen {
             drawSelection(graphics);
         }
         super.render(graphics, mouseX, mouseY, partialTick);
+        if (earthwardCreateButton != null) {
+            earthwardCreateButton.active = spawnSelected;
+            earthwardCreateButton.setMessage(Component.literal(spawnSelected ? "Earthward dünyasını oluştur" : "Güvenli konum seç"));
+        }
         drawHud(graphics);
     }
 
@@ -205,6 +214,7 @@ public final class EarthwardMapScreen extends Screen {
         if (button == 0 && model != null && !dragged && !handled) {
             selectedX = viewport.screenToWorldX(mouseX, width);
             selectedZ = viewport.screenToWorldZ(mouseY, height);
+            spawnSelected = true;
             return true;
         }
         return handled || (button == 0 && model != null);
