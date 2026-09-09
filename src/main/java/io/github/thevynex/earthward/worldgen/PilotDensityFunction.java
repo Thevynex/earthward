@@ -20,8 +20,7 @@ final class PilotDensityFunction implements DensityFunction {
         try {
             var point = projection.toGeographic(x + 0.5, z + 0.5);
             double metres = elevation.sampleMetres(point.longitude(), point.latitude());
-            double surfaceY = PilotTerrainSampler.SEA_LEVEL_Y + metres;
-            return Math.max(-200.0, Math.min(200.0, (surfaceY - y) * 0.35));
+            return TerrainDensity.at(metres, y);
         } catch (IllegalArgumentException outsidePackage) {
             return -200.0;
         }
