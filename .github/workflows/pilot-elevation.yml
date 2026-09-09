@@ -1,0 +1,71 @@
+name: Earthward pilot elevation
+
+on:
+  push:
+    branches: [dev/bootstrap]
+    paths:
+      - '.github/workflows/pilot-elevation.yml'
+      - 'tools/prepare_elevation.py'
+      - 'tools/test_prepare_elevation.py'
+      - 'data/pilot_area.json'
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/pilot-elevation.yml'
+      - 'tools/prepare_elevation.py'
+      - 'tools/test_prepare_elevation.py'
+      - 'data/pilot_area.json'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: earthward-elevation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  elevation:
+    name: Acquire bounded Copernicus GLO-30 elevation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Run synthetic elevation contracts
+        run: python3 -m unittest discover -s tools -p 'test_prepare_elevation.py' -v
+      - name: Install pinned raster reader
+        if: github.event_name != 'pull_request'
+        run: python3 -m pip install --disable-pip-version-check --no-input rasterio==1.4.3
+      - name: Download one public COG tile without credentials
+        if: github.event_name != 'pull_request'
+        env:
+          SOURCE_URL: https://copernicus-dem-30m.s3.eu-central-1.amazonaws.com/Copernicus_DSM_COG_10_N40_00_E029_00_DEM/Copernicus_DSM_COG_10_N40_00_E029_00_DEM.tif
+        run: |
+          curl --fail --location --silent --show-error --max-time 180 --output source-dem.tif "$SOURCE_URL"
+          size=$(stat -c %s source-dem.tif)
+          test "$size" -gt 0
+          test "$size" -le 134217728
+          sha256sum source-dem.tif
+      - name: Prepare bounded immutable elevation package
+        if: github.event_name != 'pull_request'
+        run: python3 tools/prepare_elevation.py --area data/pilot_area.json --source source-dem.tif --output elevation-output
+      - name: Upload development elevation package
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: earthward-pilot-elevation-${{ github.sha }}
+          path: elevation-output/
+          if-no-files-found: error
+          retention-days: 7
+      - name: Record validation boundary
+        if: always()
+        run: |
+          {
+            echo '## Elevation package only — generation remains disabled'
+            echo 'Source: public Copernicus GLO-30 2021 DSM COG, approximately 30 m samples.'
+            echo 'This is not a 1 m survey, bare-earth DTM, safe-spawn proof, terrain generator, client-load test, or performance result.'
+            echo 'No credentials, paid service, runtime game download, scale compression, or save mutation is used.'
+          } >> "$GITHUB_STEP_SUMMARY"
