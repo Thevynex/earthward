@@ -1,0 +1,41 @@
+name: Apply verified map create button
+on:
+  push:
+    branches: [dev/bootstrap]
+    paths: ['.github/workflows/apply-map-button.yml']
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('src/main/java/io/github/thevynex/earthward/client/EarthwardMapScreen.java'); s=p.read_text()
+          def r(a,b):
+              global s
+              if a not in s: raise SystemExit('missing '+a[:50])
+              s=s.replace(a,b)
+          r('import io.github.thevynex.earthward.client.map.ProjectedMapModel;', 'import io.github.thevynex.earthward.client.map.ProjectedMapModel;\nimport io.github.thevynex.earthward.client.worldgen.EarthwardWorldCreationLauncher;')
+          r('private volatile ProjectedMapModel model;', 'private volatile ProjectedMapModel model;\n    private volatile boolean elevationVerified;\n    private volatile boolean spawnVerified;')
+          old='''CompletableFuture.supplyAsync(() -> GeoPackageLoader.inspect(
+                    FMLPaths.GAMEDIR.get().resolve("earthward").resolve("packages"), packageId))'''
+          new='''CompletableFuture.supplyAsync(() -> {
+                var root = FMLPaths.GAMEDIR.get().resolve("earthward").resolve("packages");
+                elevationVerified = io.github.thevynex.earthward.geo.ElevationPackageLoader.inspect(root, packageId).status()
+                        == io.github.thevynex.earthward.geo.ElevationPackageLoader.Status.VERIFIED;
+                return GeoPackageLoader.inspect(root, packageId);
+            })'''
+          r(old,new)
+          r('Component.translatable("earthward.map.create_unavailable"), button -> {})', 'Component.translatable("earthward.map.create_unavailable"), button -> {\n                    if (spawnVerified) EarthwardWorldCreationLauncher.start(packageId,\n                            (int)Math.round(selectedX), (int)Math.round(selectedZ));\n                })')
+          r('super.render(graphics, mouseX, mouseY, partialTick);\n        drawHud(graphics);', 'super.render(graphics, mouseX, mouseY, partialTick);\n        if (earthwardCreateButton != null) {\n            earthwardCreateButton.active = spawnVerified;\n            earthwardCreateButton.setMessage(Component.literal(spawnVerified ? "Earthward dünyasını oluştur" : "Güvenli konum seç"));\n        }\n        drawHud(graphics);')
+          r('selectedZ = viewport.screenToWorldZ(mouseY, height);\n            return true;', 'selectedZ = viewport.screenToWorldZ(mouseY, height);\n            spawnVerified = elevationVerified && inspection != null\n                    && inspection.status() == GeoPackageLoader.Status.VERIFIED_GEOMETRY_ONLY;\n            return true;')
+          p.write_text(s)
+          PY
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add src/main/java/io/github/thevynex/earthward/client/EarthwardMapScreen.java
+          git commit -m 'feat(client): enable verified package world creation from map'
+          git push origin HEAD:dev/bootstrap
