@@ -4,7 +4,7 @@ The input is one public Cloud Optimized GeoTIFF. The output is a compact JSON gr
 plus checksum/provenance manifest. Existing output directories are never replaced.
 """
 from __future__ import annotations
-import argparse, hashlib, json, math, shutil, tempfile
+import argparse, hashlib, json, math, re, shutil, tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -16,10 +16,10 @@ SOURCE_TEMPLATE = ('https://copernicus-dem-30m.s3.eu-central-1.amazonaws.com/'
 
 
 def validate_area(area):
-    if not isinstance(area, dict) or area.get('schema_version') != 1:
+    if not isinstance(area, dict) or type(area.get('schema_version')) is not int or area['schema_version'] != 1:
         raise ValueError('Unsupported area schema')
     package_id = area.get('package_id')
-    if not isinstance(package_id, str) or not package_id.replace('_', '').isalnum():
+    if not isinstance(package_id, str) or not re.fullmatch(r'[a-z][a-z0-9_-]{0,63}', package_id):
         raise ValueError('Invalid package id')
     bbox = area.get('bbox_south_west_north_east')
     if not isinstance(bbox, list) or len(bbox) != 4 or not all(type(v) in (int, float) and math.isfinite(v) for v in bbox):
