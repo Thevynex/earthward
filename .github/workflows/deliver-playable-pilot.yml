@@ -1,0 +1,52 @@
+name: Deliver playable Earthward pilot
+on:
+  push:
+    branches: [dev/bootstrap]
+    paths: ['.github/workflows/deliver-playable-pilot.yml']
+permissions:
+  contents: write
+jobs:
+  deliver:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - run: python3 tools/prepare_pilot.py --area data/pilot_area.json --output pilot-output --fetch
+      - run: python3 -m pip install --disable-pip-version-check --no-input rasterio==1.4.3
+      - env:
+          SOURCE_URL: https://copernicus-dem-30m.s3.eu-central-1.amazonaws.com/Copernicus_DSM_COG_10_N40_00_E029_00_DEM/Copernicus_DSM_COG_10_N40_00_E029_00_DEM.tif
+        run: |
+          curl --fail --location --silent --show-error --max-time 180 -o source-dem.tif "$SOURCE_URL"
+          test $(stat -c %s source-dem.tif) -le 134217728
+          python3 tools/prepare_elevation.py --area data/pilot_area.json --source source-dem.tif --output elevation-output
+      - run: bash tools/install_jdk.sh
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a
+        with:
+          gradle-version: '9.2.1'
+          cache-disabled: true
+          dependency-graph: disabled
+          build-scan-publish: false
+      - run: |
+          checksum=$(curl --fail --silent --show-error --location --retry 3 --max-time 90 https://services.gradle.org/distributions/gradle-9.2.1-bin.zip.sha256)
+          gradle --no-daemon --console=plain --max-workers=2 wrapper --gradle-version 9.2.1 --distribution-type bin --gradle-distribution-sha256-sum "$checksum"
+          chmod +x gradlew
+          bash tools/ci_build.sh
+          python3 tools/check_jar.py
+      - name: Assemble transferable pilot
+        run: |
+          id=tr_istanbul_kadikoy_caferaga
+          mkdir -p bundle/mods bundle/earthward/packages/$id delivery
+          cp build/libs/earthward-0.1.0-dev.1.jar bundle/mods/
+          cp -R pilot-output/. bundle/earthward/packages/$id/
+          cp -R elevation-output/. bundle/earthward/packages/$id/
+          printf '%s\n' 'EARTHWARD PLAYABLE PILOT - Minecraft 1.21.1 / NeoForge 21.1.249 / Java 21' 'Copy this folder contents into a NEW isolated game directory. Do not use existing saves.' > bundle/INSTALL.txt
+          (cd bundle && find . -type f -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS.txt)
+          (cd bundle && zip -qr ../delivery/earthward-playable-pilot.zip .)
+          sha256sum delivery/earthward-playable-pilot.zip > delivery/earthward-playable-pilot.zip.sha256
+          base64 -w0 delivery/earthward-playable-pilot.zip > delivery/earthward-playable-pilot.zip.b64
+          rm delivery/earthward-playable-pilot.zip
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add delivery
+          git commit -m 'ci: stage playable pilot transfer [skip ci]'
+          git push origin HEAD:dev/bootstrap
