@@ -1,0 +1,26 @@
+name: Retry Earthward world selection wiring
+on:
+  push:
+    branches: [dev/bootstrap]
+    paths: ['.github/workflows/retry-world-selection.yml']
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Apply stored patch
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          text=Path('.github/workflows/apply-world-selection.yml').read_text()
+          body=text.split("python3 - <<'PY'\n",1)[1].split('\n          PY',1)[0]
+          body='\n'.join(line[10:] if line.startswith('          ') else line for line in body.splitlines())
+          exec(compile(body, 'world-selection-patch', 'exec'))
+          PY
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add src/main/java
+          git commit -m 'feat(client): enable verified map selection and persistent spawn'
+          git push origin HEAD:dev/bootstrap
