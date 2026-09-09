@@ -13,13 +13,23 @@ public final class BuildingProfileIndex {
         var built=new HashMap<String,Profile>();
         for(var feature:geometry.features())if(feature.layers().contains(GeoGeometry.Layer.BUILDING_OUTLINE)){
             int base=Integer.MIN_VALUE;double sumX=0,sumZ=0;int count=0;
-            for(var point:feature.points()){base=Math.max(base,height.surfaceY(point.x(),point.z()));sumX+=point.x();sumZ+=point.z();count++;}
-            base=Math.max(base,height.surfaceY(sumX/count,sumZ/count));
+            for(var point:feature.points()){
+                base=sampleMaximum(height,point.x(),point.z(),base);
+                sumX+=point.x();sumZ+=point.z();count++;
+            }
+            if(count>0)base=sampleMaximum(height,sumX/count,sumZ/count,base);
+            // OSM outlines and the bounded DEM can differ by sub-metre projection/rounding at package edges.
+            // A single edge vertex must not abort the whole world-creation flow.
+            if(base==Integer.MIN_VALUE)base=PilotTerrainSampler.SEA_LEVEL_Y;
             double area=Math.max(1,(feature.bounds().east()-feature.bounds().west())*(feature.bounds().south()-feature.bounds().north()));
             int floors=Math.max(2,Math.min(5,2+(int)Math.floor(Math.sqrt(area)/30.0)));
             built.put(feature.id(),new Profile(feature.id(),base,floors,floors*3,true));
         }
         profiles=Map.copyOf(built);
+    }
+    private static int sampleMaximum(SurfaceHeight height,double x,double z,int current){
+        try{return Math.max(current,height.surfaceY(x,z));}
+        catch(IllegalArgumentException edgeSample){return current;}
     }
     public Profile require(String id){var profile=profiles.get(id);if(profile==null)throw new IllegalArgumentException("Unknown building: "+id);return profile;}
     public int size(){return profiles.size();}
