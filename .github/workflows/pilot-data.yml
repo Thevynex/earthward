@@ -7,6 +7,8 @@ on:
       - '.github/workflows/pilot-data.yml'
       - 'tools/prepare_pilot.py'
       - 'tools/test_prepare_pilot.py'
+      - 'tools/prepare_elevation.py'
+      - 'tools/test_prepare_elevation.py'
       - 'data/pilot_area.json'
       - 'data/BUNDLE_VERSION'
   pull_request:
@@ -15,6 +17,8 @@ on:
       - '.github/workflows/pilot-data.yml'
       - 'tools/prepare_pilot.py'
       - 'tools/test_prepare_pilot.py'
+      - 'tools/prepare_elevation.py'
+      - 'tools/test_prepare_elevation.py'
       - 'data/pilot_area.json'
       - 'data/BUNDLE_VERSION'
   workflow_dispatch:
@@ -28,7 +32,7 @@ concurrency:
 
 jobs:
   pilot:
-    name: Validate and prepare pilot geometry
+    name: Validate and prepare complete pilot package
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
@@ -36,14 +40,28 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           persist-credentials: false
-      - name: Test bounded package pipeline with synthetic inputs
+      - name: Test bounded data pipelines with synthetic inputs
         run: |
           python3 --version
           python3 -m unittest discover -s tools -p 'test_prepare_pilot.py' -v
+          python3 -m unittest discover -s tools -p 'test_prepare_elevation.py' -v
       - name: Fetch one bounded real geometry extract
         if: github.event_name != 'pull_request'
         timeout-minutes: 2
         run: python3 tools/prepare_pilot.py --area data/pilot_area.json --output pilot-output --fetch
+      - name: Install pinned raster reader
+        if: github.event_name != 'pull_request'
+        run: python3 -m pip install --disable-pip-version-check --no-input rasterio==1.4.3
+      - name: Fetch and crop one public Copernicus GLO-30 tile
+        if: github.event_name != 'pull_request'
+        env:
+          SOURCE_URL: https://copernicus-dem-30m.s3.eu-central-1.amazonaws.com/Copernicus_DSM_COG_10_N40_00_E029_00_DEM/Copernicus_DSM_COG_10_N40_00_E029_00_DEM.tif
+        run: |
+          curl --fail --location --silent --show-error --max-time 180 --output source-dem.tif "$SOURCE_URL"
+          size=$(stat -c %s source-dem.tif)
+          test "$size" -gt 0
+          test "$size" -le 134217728
+          python3 tools/prepare_elevation.py --area data/pilot_area.json --source source-dem.tif --output elevation-output
       - name: Install checksum-pinned Temurin JDK
         if: github.event_name != 'pull_request'
         run: bash tools/install_jdk.sh
@@ -78,20 +96,20 @@ jobs:
           cp build/libs/earthward-0.1.0-dev.1.jar test-bundle/mods/
           cp build/libs/earthward-0.1.0-dev.1.jar.sha256 test-bundle/mods/
           cp -R pilot-output/. "test-bundle/earthward/packages/$package_id/"
+          cp -R elevation-output/. "test-bundle/earthward/packages/$package_id/"
           cat > test-bundle/INSTALL.txt <<'EOF'
           EARTHWARD DEVELOPMENT TEST BUNDLE — NOT A RELEASE
 
           Target: Minecraft Java 1.21.1, NeoForge 21.1.249, Java 21.
           Copy the CONTENTS of this folder into a new, isolated Minecraft game directory.
-          This places the JAR under mods/ and the ODbL pilot geometry under earthward/packages/.
+          The JAR, ODbL OSM geometry, and Copernicus GLO-30 elevation package are placed in their expected paths.
 
-          The fresh vanilla Create World flow is replaced by a full-screen pannable/zoomable
-          vector pilot map. Earthward world creation remains disabled: terrain, safe spawn,
-          interiors, NPCs, gameplay and performance are NOT implemented yet.
-          Existing saves must not be used for testing this development bundle.
+          The mod registers a bounded DEM chunk generator and can plan/apply inferred asphalt and building shells.
+          The full-screen picker is present. World creation remains guarded until its launcher, save ownership,
+          and real client-load validation are complete. Existing saves must not be used.
 
           OSM-derived geometry is © OpenStreetMap contributors and ODbL-1.0.
-          See earthward/packages/tr_istanbul_kadikoy_caferaga/ATTRIBUTION.txt.
+          Copernicus DEM licence/disclaimer applies to elevation files. Read both attribution files.
           EOF
           (
             cd test-bundle
@@ -105,22 +123,23 @@ jobs:
           path: test-bundle/
           if-no-files-found: error
           retention-days: 7
-      - name: Upload separate ODbL geometry package
+      - name: Upload separate source-data packages
         if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: earthward-pilot-geometry-${{ github.sha }}
-          path: pilot-output/
+          name: earthward-pilot-data-${{ github.sha }}
+          path: |
+            pilot-output/
+            elevation-output/
           if-no-files-found: error
           retention-days: 7
       - name: Record validation boundary
         if: always()
         run: |
           {
-            echo '## Development test bundle, not generated terrain'
-            echo 'Unit tests use synthetic fixtures. Real acquisition/build/bundle steps run on dev/bootstrap push or manual dispatch, not pull_request.'
-            echo 'Check individual step outcomes: skipped is not passed. No automatic Overpass request retries.'
-            echo 'A successful combined artifact contains a checked mod JAR plus ODbL pilot geometry in their expected game-directory paths.'
-            echo 'It does not establish game loading, source accuracy, full coverage, terrain, spawn, gameplay or performance.'
-            echo 'No raster tiles, paid services, personal credentials or runtime game downloads are used.'
+            echo '## Complete pilot package, not a gameplay validation'
+            echo 'Synthetic tests run on pull requests; real OSM, Copernicus, build and bundle steps run on dev/bootstrap pushes.'
+            echo 'The artifact contains a checked JAR plus separately licensed geometry and elevation in one package directory.'
+            echo 'Success does not prove Minecraft client loading, safe spawning, save updates, interiors, NPCs or performance.'
+            echo 'No paid service, credentials, runtime game download, horizontal compression, vertical compression or save mutation is used.'
           } >> "$GITHUB_STEP_SUMMARY"
