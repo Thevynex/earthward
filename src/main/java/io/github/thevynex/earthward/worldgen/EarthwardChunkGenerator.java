@@ -3,26 +3,35 @@ package io.github.thevynex.earthward.worldgen;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
+import io.github.thevynex.earthward.geo.ChunkGeometryIndex;
+import io.github.thevynex.earthward.geo.ElevationGrid;
 import io.github.thevynex.earthward.geo.ElevationPackageLoader;
+import io.github.thevynex.earthward.geo.GeoPackageLoader;
 import io.github.thevynex.earthward.geo.LocalMetricProjection;
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.core.HolderGetter;
 import net.minecraft.core.RegistryAccess;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.StructureManager;
+import net.minecraft.world.level.WorldGenLevel;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.biome.BiomeSource;
 import net.minecraft.world.level.biome.Biomes;
 import net.minecraft.world.level.biome.FixedBiomeSource;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.chunk.ChunkGenerator;
 import net.minecraft.world.level.chunk.ChunkGeneratorStructureState;
+import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.levelgen.NoiseBasedChunkGenerator;
 import net.minecraft.world.level.levelgen.NoiseGeneratorSettings;
 import net.minecraft.world.level.levelgen.NoiseRouter;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplateManager;
 import net.neoforged.fml.loading.FMLPaths;
 
-/** Serializable bounded pilot generator backed by an installed, hash-verified elevation package. */
+/** Serializable bounded generator backed by installed, hash-verified elevation and geometry packages. */
 public final class EarthwardChunkGenerator extends NoiseBasedChunkGenerator {
     public static final double PILOT_ORIGIN_LATITUDE = 40.9848;
     public static final double PILOT_ORIGIN_LONGITUDE = 29.0268;
@@ -34,11 +43,18 @@ public final class EarthwardChunkGenerator extends NoiseBasedChunkGenerator {
     ).apply(instance, EarthwardChunkGenerator::new));
 
     private final String packageId;
+    private final ChunkPlacementPlanner placementPlanner;
 
     public EarthwardChunkGenerator(BiomeSource biomeSource, Holder<NoiseGeneratorSettings> baseSettings,
                                    String packageId) {
-        super(biomeSource, Holder.direct(settings(baseSettings.value(), load(packageId))));
+        this(biomeSource, baseSettings, packageId, prepare(packageId));
+    }
+
+    private EarthwardChunkGenerator(BiomeSource biomeSource, Holder<NoiseGeneratorSettings> baseSettings,
+                                    String packageId, PreparedPackage prepared) {
+        super(biomeSource, Holder.direct(settings(baseSettings.value(), prepared.elevation())));
         this.packageId = packageId;
+        this.placementPlanner = prepared.placementPlanner();
     }
 
     public static EarthwardChunkGenerator create(HolderGetter<Biome> biomes,
@@ -48,17 +64,21 @@ public final class EarthwardChunkGenerator extends NoiseBasedChunkGenerator {
                 noiseSettings.getOrThrow(NoiseGeneratorSettings.OVERWORLD), packageId);
     }
 
-    private static io.github.thevynex.earthward.geo.ElevationGrid load(String packageId) {
-        var inspection = ElevationPackageLoader.inspect(
-                FMLPaths.GAMEDIR.get().resolve("earthward").resolve("packages"), packageId);
-        if (inspection.status() != ElevationPackageLoader.Status.VERIFIED) {
-            throw new IllegalArgumentException("Elevation package is not verified: " + inspection.detail());
+    private static PreparedPackage prepare(String packageId) {
+        var root = FMLPaths.GAMEDIR.get().resolve("earthward").resolve("packages");
+        var elevation = ElevationPackageLoader.inspect(root, packageId);
+        if (elevation.status() != ElevationPackageLoader.Status.VERIFIED) {
+            throw new IllegalArgumentException("Elevation package is not verified: " + elevation.detail());
         }
-        return inspection.grid();
+        var geometry = GeoPackageLoader.inspect(root, packageId);
+        if (geometry.status() != GeoPackageLoader.Status.VERIFIED_GEOMETRY_ONLY) {
+            throw new IllegalArgumentException("Geometry package is not verified: " + geometry.detail());
+        }
+        var rasterizer = new ChunkFeatureRasterizer(ChunkGeometryIndex.from(geometry.geometry()));
+        return new PreparedPackage(elevation.grid(), new ChunkPlacementPlanner(rasterizer));
     }
 
-    private static NoiseGeneratorSettings settings(NoiseGeneratorSettings vanilla,
-                                                    io.github.thevynex.earthward.geo.ElevationGrid elevation) {
+    private static NoiseGeneratorSettings settings(NoiseGeneratorSettings vanilla, ElevationGrid elevation) {
         NoiseRouter router = vanilla.noiseRouter();
         var density = new PilotDensityFunction(elevation,
                 new LocalMetricProjection(PILOT_ORIGIN_LATITUDE, PILOT_ORIGIN_LONGITUDE));
@@ -77,6 +97,34 @@ public final class EarthwardChunkGenerator extends NoiseBasedChunkGenerator {
         // Vanilla structures are deliberately disabled in the bounded real-world pilot.
     }
 
+    @Override public void applyBiomeDecoration(WorldGenLevel level, ChunkAccess chunk,
+                                               StructureManager structureManager) {
+        ChunkPos chunkPos = chunk.getPos();
+        int[] surfaces = new int[256];
+        for (int localZ = 0; localZ < 16; localZ++) for (int localX = 0; localX < 16; localX++) {
+            surfaces[localZ * 16 + localX] = chunk.getHeight(Heightmap.Types.WORLD_SURFACE_WG, localX, localZ) - 1;
+        }
+        var plan = placementPlanner.plan(chunkPos.x, chunkPos.z, surfaces);
+        int minimumY = chunk.getMinBuildHeight();
+        int maximumY = minimumY + chunk.getHeight() - 1;
+        for (var placement : plan.placements()) {
+            if (placement.y() < minimumY || placement.y() > maximumY) continue;
+            chunk.setBlockState(new BlockPos(placement.x(), placement.y(), placement.z()),
+                    blockFor(placement.material()), false);
+        }
+    }
+
+    private static BlockState blockFor(ChunkPlacementPlanner.Material material) {
+        return switch (material) {
+            case ROAD -> Blocks.GRAY_CONCRETE.defaultBlockState();
+            case FOUNDATION -> Blocks.SMOOTH_STONE.defaultBlockState();
+            case WALL -> Blocks.BRICKS.defaultBlockState();
+            case ROOF -> Blocks.LIGHT_GRAY_CONCRETE.defaultBlockState();
+        };
+    }
+
     public String packageId() { return packageId; }
     @Override protected MapCodec<? extends ChunkGenerator> codec() { return CODEC; }
+
+    private record PreparedPackage(ElevationGrid elevation, ChunkPlacementPlanner placementPlanner) {}
 }
