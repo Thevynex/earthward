@@ -19,4 +19,17 @@ final class BuildingProfileIndexTest {
         for(int x=-3;x<=3;x++)for(int z=-3;z<=3;z++)for(String id:rasterizer.rasterize(x,z).buildingIds())if("osm:way:123".equals(id))found=true;
         assertTrue(found);
     }
+    @Test void demEdgeSampleDoesNotAbortWorldPreparation(){
+        var profiles=assertDoesNotThrow(()->new BuildingProfileIndex(geometry(),(x,z)->{
+            if(x<0||z<0)throw new IllegalArgumentException("Coordinate outside elevation grid");
+            return 74;
+        }));
+        assertEquals(74,profiles.require("osm:way:123").baseY());
+    }
+    @Test void fullyOutsideBuildingGetsDocumentedSeaLevelFallback(){
+        var profiles=assertDoesNotThrow(()->new BuildingProfileIndex(geometry(),(x,z)->{
+            throw new IllegalArgumentException("Coordinate outside elevation grid");
+        }));
+        assertEquals(PilotTerrainSampler.SEA_LEVEL_Y,profiles.require("osm:way:123").baseY());
+    }
 }
