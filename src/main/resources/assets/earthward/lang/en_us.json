@@ -6,6 +6,6 @@
   "earthward.selection.package_checking": "Validating the local geographic package in the background…",
   "earthward.selection.no_data": "No local geographic package exists for %s. No save was created and no data was downloaded.",
   "earthward.selection.invalid_package": "The %s package is incomplete, modified, or unsupported. It was not used and saves were not changed.",
-  "earthward.selection.package_verified": "The %s geometry package and SHA-256 are verified. Elevation, safe spawn, and the world generator are still missing, so a world cannot be created.",
+  "earthward.selection.package_verified": "%s verified: %s building outlines, %s road centerlines, and %s coordinate points. Elevation, safe spawn, and the world generator are still missing, so a world cannot be created.",
   "earthward.selection.invalid_catalog": "Selection catalog missing or invalid. Existing saves were not changed."
 }

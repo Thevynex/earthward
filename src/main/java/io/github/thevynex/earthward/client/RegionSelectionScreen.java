@@ -80,7 +80,9 @@ public final class RegionSelectionScreen extends Screen {
         return switch (inspection.status()) {
             case MISSING -> Component.translatable("earthward.selection.no_data", catalog.regionId());
             case INVALID -> Component.translatable("earthward.selection.invalid_package", catalog.regionId());
-            case VERIFIED_GEOMETRY_ONLY -> Component.translatable("earthward.selection.package_verified", catalog.regionId());
+            case VERIFIED_GEOMETRY_ONLY -> Component.translatable("earthward.selection.package_verified",
+                    catalog.regionId(), inspection.geometry().buildingCount(), inspection.geometry().roadCount(),
+                    inspection.geometry().pointCount());
         };
     }
 

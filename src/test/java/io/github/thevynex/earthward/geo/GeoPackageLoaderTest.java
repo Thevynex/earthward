@@ -9,6 +9,11 @@ import java.util.HexFormat;
 import static org.junit.jupiter.api.Assertions.*;
 
 final class GeoPackageLoaderTest {
+    private static final byte[] VALID_GEOMETRY = """
+            {"schema_version":1,"crs":"EPSG:4326","features":[
+            {"id":"osm:way:1","layers":["road_centerline"],"coordinates_lon_lat":[[29,41],[29.1,41.1]]}]}
+            """.getBytes(StandardCharsets.UTF_8);
+
     @Test void missingPackageIsReported() throws Exception {
         Path root = Files.createTempDirectory("earthward-missing");
         assertEquals(GeoPackageLoader.Status.MISSING, GeoPackageLoader.inspect(root, "pilot").status());
@@ -18,21 +23,20 @@ final class GeoPackageLoaderTest {
         Path root = Files.createTempDirectory("earthward-valid");
         Path packageDir = root.resolve("pilot");
         Files.createDirectory(packageDir);
-        byte[] geometry = "{\"schema_version\":1,\"features\":[]}".getBytes(StandardCharsets.UTF_8);
-        Files.write(packageDir.resolve("geometry.json"), geometry);
-        Files.writeString(packageDir.resolve("manifest.json"), manifest("pilot", geometry, false));
+        Files.write(packageDir.resolve("geometry.json"), VALID_GEOMETRY);
+        Files.writeString(packageDir.resolve("manifest.json"), manifest("pilot", VALID_GEOMETRY, false));
         var result = GeoPackageLoader.inspect(root, "pilot");
         assertEquals(GeoPackageLoader.Status.VERIFIED_GEOMETRY_ONLY, result.status());
         assertFalse(result.manifest().generationReady());
+        assertEquals(1, result.geometry().roadCount());
     }
 
     @Test void rejectsDigestMismatch() throws Exception {
         Path root = Files.createTempDirectory("earthward-digest");
         Path packageDir = root.resolve("pilot");
         Files.createDirectory(packageDir);
-        byte[] geometry = "original".getBytes(StandardCharsets.UTF_8);
         Files.write(packageDir.resolve("geometry.json"), "changed".getBytes(StandardCharsets.UTF_8));
-        Files.writeString(packageDir.resolve("manifest.json"), manifest("pilot", geometry, false));
+        Files.writeString(packageDir.resolve("manifest.json"), manifest("pilot", VALID_GEOMETRY, false));
         assertEquals(GeoPackageLoader.Status.INVALID, GeoPackageLoader.inspect(root, "pilot").status());
     }
 
@@ -40,15 +44,24 @@ final class GeoPackageLoaderTest {
         Path root = Files.createTempDirectory("earthward-id");
         Path packageDir = root.resolve("pilot");
         Files.createDirectory(packageDir);
-        byte[] geometry = "x".getBytes(StandardCharsets.UTF_8);
-        Files.write(packageDir.resolve("geometry.json"), geometry);
-        Files.writeString(packageDir.resolve("manifest.json"), manifest("other", geometry, true));
+        Files.write(packageDir.resolve("geometry.json"), VALID_GEOMETRY);
+        Files.writeString(packageDir.resolve("manifest.json"), manifest("other", VALID_GEOMETRY, true));
         assertEquals(GeoPackageLoader.Status.INVALID, GeoPackageLoader.inspect(root, "pilot").status());
     }
 
     @Test void rejectsTraversalIdentifier() throws Exception {
         Path root = Files.createTempDirectory("earthward-traversal");
         assertEquals(GeoPackageLoader.Status.INVALID, GeoPackageLoader.inspect(root, "../saves").status());
+    }
+
+    @Test void rejectsHashValidButInvalidGeometrySchema() throws Exception {
+        Path root = Files.createTempDirectory("earthward-schema");
+        Path packageDir = root.resolve("pilot");
+        Files.createDirectory(packageDir);
+        byte[] geometry = "{\"schema_version\":2}".getBytes(StandardCharsets.UTF_8);
+        Files.write(packageDir.resolve("geometry.json"), geometry);
+        Files.writeString(packageDir.resolve("manifest.json"), manifest("pilot", geometry, false));
+        assertEquals(GeoPackageLoader.Status.INVALID, GeoPackageLoader.inspect(root, "pilot").status());
     }
 
     private static String manifest(String packageId, byte[] geometry, boolean generationReady) throws Exception {

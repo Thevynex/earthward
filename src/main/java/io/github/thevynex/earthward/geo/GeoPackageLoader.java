@@ -1,5 +1,6 @@
 package io.github.thevynex.earthward.geo;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -10,12 +11,12 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
 
-/** Validates an external package without mutating saves or loading geometry into RAM. */
+/** Validates an external package without mutating saves. Geometry is parsed only after hash verification. */
 public final class GeoPackageLoader {
     private GeoPackageLoader() {}
 
     public enum Status { MISSING, INVALID, VERIFIED_GEOMETRY_ONLY }
-    public record Inspection(Status status, String detail, GeoPackageManifest manifest) {}
+    public record Inspection(Status status, String detail, GeoPackageManifest manifest, GeoGeometry geometry) {}
 
     public static Inspection inspect(Path packagesRoot, String packageId) {
         try {
@@ -25,25 +26,26 @@ public final class GeoPackageLoader {
             Path normalizedRoot = packagesRoot.toAbsolutePath().normalize();
             Path directory = normalizedRoot.resolve(packageId).normalize();
             if (!directory.getParent().equals(normalizedRoot)) return invalid("invalid_path");
-            if (!Files.exists(directory, LinkOption.NOFOLLOW_LINKS)) return new Inspection(Status.MISSING, "missing", null);
+            if (!Files.exists(directory, LinkOption.NOFOLLOW_LINKS)) {
+                return new Inspection(Status.MISSING, "missing", null, null);
+            }
             if (!Files.isDirectory(directory, LinkOption.NOFOLLOW_LINKS) || Files.isSymbolicLink(directory)) {
                 return invalid("invalid_directory");
             }
             Path manifestPath = regularChild(directory, "manifest.json");
             Path geometryPath = regularChild(directory, "geometry.json");
-            long manifestBytes = Files.size(manifestPath);
-            if (manifestBytes <= 0 || manifestBytes > GeoPackageManifest.MAX_MANIFEST_CHARS * 4L) {
-                return invalid("manifest_size");
-            }
-            String manifestText = Files.readString(manifestPath, StandardCharsets.UTF_8);
+            byte[] manifestBytes = readBounded(manifestPath, GeoPackageManifest.MAX_MANIFEST_CHARS * 4L);
+            String manifestText = new String(manifestBytes, StandardCharsets.UTF_8);
             GeoPackageManifest manifest = GeoPackageManifest.parse(manifestText, packageId);
-            if (Files.size(geometryPath) != manifest.geometryBytes()) return invalid("geometry_size");
-            String digest = sha256(geometryPath, GeoPackageManifest.MAX_GEOMETRY_BYTES);
+            byte[] geometryBytes = readBounded(geometryPath, GeoPackageManifest.MAX_GEOMETRY_BYTES);
+            if (geometryBytes.length != manifest.geometryBytes()) return invalid("geometry_size");
+            String digest = sha256(geometryBytes);
             if (!MessageDigest.isEqual(digest.getBytes(StandardCharsets.US_ASCII),
                     manifest.geometrySha256().getBytes(StandardCharsets.US_ASCII))) {
                 return invalid("geometry_digest");
             }
-            return new Inspection(Status.VERIFIED_GEOMETRY_ONLY, "verified_geometry_only", manifest);
+            GeoGeometry geometry = GeoGeometry.parse(new String(geometryBytes, StandardCharsets.UTF_8));
+            return new Inspection(Status.VERIFIED_GEOMETRY_ONLY, "verified_geometry_only", manifest, geometry);
         } catch (Exception error) {
             return invalid("invalid_package");
         }
@@ -58,22 +60,26 @@ public final class GeoPackageLoader {
         return path;
     }
 
-    private static String sha256(Path path, long limit) throws IOException, NoSuchAlgorithmException {
-        MessageDigest digest = MessageDigest.getInstance("SHA-256");
-        long total = 0;
-        byte[] buffer = new byte[8192];
-        try (InputStream input = Files.newInputStream(path)) {
+    private static byte[] readBounded(Path path, long limit) throws IOException {
+        try (InputStream input = Files.newInputStream(path); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            byte[] buffer = new byte[8192];
+            long total = 0;
             int read;
             while ((read = input.read(buffer)) >= 0) {
                 total += read;
-                if (total > limit) throw new IOException("Geometry exceeds size limit");
-                digest.update(buffer, 0, read);
+                if (total > limit) throw new IOException("Package file exceeds size limit");
+                output.write(buffer, 0, read);
             }
+            if (total == 0) throw new IOException("Package file is empty");
+            return output.toByteArray();
         }
-        return HexFormat.of().formatHex(digest.digest());
+    }
+
+    private static String sha256(byte[] data) throws NoSuchAlgorithmException {
+        return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(data));
     }
 
     private static Inspection invalid(String detail) {
-        return new Inspection(Status.INVALID, detail, null);
+        return new Inspection(Status.INVALID, detail, null, null);
     }
 }
