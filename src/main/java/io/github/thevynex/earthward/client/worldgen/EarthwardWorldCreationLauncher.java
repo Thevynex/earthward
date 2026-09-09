@@ -28,11 +28,9 @@ import net.minecraft.world.level.levelgen.WorldOptions;
 import net.minecraft.world.level.levelgen.presets.WorldPresets;
 import net.neoforged.neoforge.resource.ResourcePackLoader;
 
-/** Loads vanilla datapacks and replaces only the overworld generator. */
 public final class EarthwardWorldCreationLauncher {
     private EarthwardWorldCreationLauncher() {}
-
-    public static void start(String packageId) {
+    public static void start(String packageId, int requestedSpawnX, int requestedSpawnZ) {
         Minecraft minecraft = Minecraft.getInstance();
         minecraft.forceSetScreen(new GenericMessageScreen(Component.translatable("createWorld.preparing")));
         try {
@@ -41,7 +39,8 @@ public final class EarthwardWorldCreationLauncher {
             RegistryAccess.Frozen registries = context.worldgenRegistries().compositeAccess();
             HolderGetter<Biome> biomes = registries.registryOrThrow(Registries.BIOME).asLookup();
             HolderGetter<NoiseGeneratorSettings> settings = registries.registryOrThrow(Registries.NOISE_SETTINGS).asLookup();
-            ChunkGenerator generator = EarthwardChunkGenerator.create(biomes, settings, packageId);
+            ChunkGenerator generator = EarthwardChunkGenerator.create(biomes, settings, packageId,
+                    requestedSpawnX, requestedSpawnZ);
             WorldDimensions dimensions = context.selectedDimensions().replaceOverworldGenerator(registries, generator);
             context = context.withSettings(new WorldOptions(seed, true, false), dimensions);
             minecraft.setScreen(new EarthwardCreateWorldScreen(context, packageId, seed));
@@ -50,7 +49,6 @@ public final class EarthwardWorldCreationLauncher {
             minecraft.setScreen(new TitleScreen());
         }
     }
-
     private static WorldCreationContext loadContext(Minecraft minecraft) {
         PackRepository repository = new PackRepository(new ServerPacksSource(minecraft.directoryValidator()));
         ResourcePackLoader.populatePackRepository(repository, PackType.SERVER_DATA, false);
@@ -59,9 +57,8 @@ public final class EarthwardWorldCreationLauncher {
                 Commands.CommandSelection.INTEGRATED, 2);
         CompletableFuture<WorldCreationContext> future = WorldLoader.load(configuration, context -> {
             if (context.datapackWorldgen().registryOrThrow(Registries.WORLD_PRESET).size() == 0
-                    || context.datapackWorldgen().registryOrThrow(Registries.BIOME).size() == 0) {
+                    || context.datapackWorldgen().registryOrThrow(Registries.BIOME).size() == 0)
                 throw new IllegalStateException("Vanilla world registries unavailable");
-            }
             WorldGenSettings settings = new WorldGenSettings(WorldOptions.defaultWithRandomSeed(),
                     WorldPresets.createNormalWorldDimensions(context.datapackWorldgen()));
             return new WorldLoader.DataLoadOutput<>(new LoadCookie(settings, context.dataConfiguration()),
@@ -73,6 +70,5 @@ public final class EarthwardWorldCreationLauncher {
         minecraft.managedBlock(future::isDone);
         return future.join();
     }
-
     private record LoadCookie(WorldGenSettings settings, WorldDataConfiguration configuration) {}
 }

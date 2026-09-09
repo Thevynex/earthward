@@ -12,13 +12,10 @@ import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.fml.loading.FMLPaths;
 import net.neoforged.neoforge.event.level.LevelEvent;
 
-/** Replaces vanilla random spawn only after the installed pilot packages produce a safe result. */
 @EventBusSubscriber(modid = Earthward.MOD_ID)
 public final class WorldSpawnEvents {
     private WorldSpawnEvents() {}
-
-    @SubscribeEvent
-    public static void onCreateSpawnPosition(LevelEvent.CreateSpawnPosition event) {
+    @SubscribeEvent public static void onCreateSpawnPosition(LevelEvent.CreateSpawnPosition event) {
         if (!(event.getLevel() instanceof ServerLevel level)
                 || !(level.getChunkSource().getGenerator() instanceof EarthwardChunkGenerator generator)) return;
         var root = FMLPaths.GAMEDIR.get().resolve("earthward").resolve("packages");
@@ -28,13 +25,14 @@ public final class WorldSpawnEvents {
                 || geometry.status() != GeoPackageLoader.Status.VERIFIED_GEOMETRY_ONLY) return;
         var projection = new LocalMetricProjection(EarthwardChunkGenerator.PILOT_ORIGIN_LATITUDE,
                 EarthwardChunkGenerator.PILOT_ORIGIN_LONGITUDE);
-        var rasterizer = new ChunkFeatureRasterizer(ChunkGeometryIndex.from(geometry.geometry()));
-        var validator = new SafeSpawnValidator(rasterizer, (x, z) -> {
+        var validator = new SafeSpawnValidator(new ChunkFeatureRasterizer(
+                ChunkGeometryIndex.from(geometry.geometry())), (x,z) -> {
             var coordinate = projection.toGeographic(x + 0.5, z + 0.5);
-            double metres = elevation.grid().sampleMetres(coordinate.longitude(), coordinate.latitude());
-            return PilotTerrainSampler.SEA_LEVEL_Y + (int) Math.round(metres);
+            return PilotTerrainSampler.SEA_LEVEL_Y + (int)Math.round(
+                    elevation.grid().sampleMetres(coordinate.longitude(), coordinate.latitude()));
         });
-        var spawn = validator.findNearest(0, 0, SafeSpawnValidator.MAX_RADIUS_METRES);
+        var spawn = validator.findNearest(generator.requestedSpawnX(), generator.requestedSpawnZ(),
+                SafeSpawnValidator.MAX_RADIUS_METRES);
         if (spawn.isEmpty()) return;
         var point = spawn.get();
         event.getSettings().setSpawn(new BlockPos(point.x(), point.y(), point.z()), 0.0F);
