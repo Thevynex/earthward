@@ -1,14 +1,18 @@
 package io.github.thevynex.earthward.client;
 
+import io.github.thevynex.earthward.geo.GeoPackageLoader;
 import io.github.thevynex.earthward.selection.SelectionCatalog;
+import java.util.concurrent.CompletableFuture;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
+import net.neoforged.fml.loading.FMLPaths;
 
 public final class RegionSelectionScreen extends Screen {
     private final Screen parent;
     private SelectionCatalog catalog;
+    private volatile GeoPackageLoader.Inspection packageInspection;
     private int stage;
     private String problem;
 
@@ -17,6 +21,9 @@ public final class RegionSelectionScreen extends Screen {
         this.parent = parent;
         try {
             catalog = SelectionCatalog.loadBundled();
+            CompletableFuture.supplyAsync(() -> GeoPackageLoader.inspect(
+                    FMLPaths.GAMEDIR.get().resolve("earthward").resolve("packages"), catalog.regionId()))
+                    .thenAccept(result -> packageInspection = result);
         } catch (Exception error) {
             problem = "earthward.selection.invalid_catalog";
         }
@@ -61,10 +68,20 @@ public final class RegionSelectionScreen extends Screen {
         } else if (stage < catalog.levels().size()) {
             detail = Component.translatable("earthward.selection.step", stage + 1, catalog.levels().size());
         } else {
-            detail = Component.translatable("earthward.selection.no_data", catalog.regionId());
+            detail = packageDetail();
         }
         graphics.drawWordWrap(font, detail, left, 100, panelWidth, 0xFFFFFFFF);
         super.render(graphics, mouseX, mouseY, partialTick);
+    }
+
+    private Component packageDetail() {
+        var inspection = packageInspection;
+        if (inspection == null) return Component.translatable("earthward.selection.package_checking");
+        return switch (inspection.status()) {
+            case MISSING -> Component.translatable("earthward.selection.no_data", catalog.regionId());
+            case INVALID -> Component.translatable("earthward.selection.invalid_package", catalog.regionId());
+            case VERIFIED_GEOMETRY_ONLY -> Component.translatable("earthward.selection.package_verified", catalog.regionId());
+        };
     }
 
     @Override

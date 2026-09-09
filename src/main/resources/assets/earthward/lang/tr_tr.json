@@ -1,8 +1,11 @@
 {
   "earthward.selection.title": "Earthward — Bölge seçimi",
-  "earthward.selection.preview": "Geliştirme önizlemesi · gerçek harita yok",
+  "earthward.selection.preview": "Geliştirme önizlemesi · dünya üretimi kapalı",
   "earthward.selection.step": "Adım %s / %s. Pilot seçimine devam et.",
   "earthward.selection.create_unavailable": "Dünya oluşturma kullanılamıyor",
-  "earthward.selection.no_data": "%s için coğrafi veri paketi ve üretici henüz yok. Harita ve doğuş konumu seçimi kullanılamaz. Kayıt oluşturulmadı; internetten veri indirilmedi.",
+  "earthward.selection.package_checking": "Yerel coğrafi veri paketi arka planda doğrulanıyor…",
+  "earthward.selection.no_data": "%s için yerel coğrafi veri paketi bulunamadı. Kayıt oluşturulmadı; internetten veri indirilmedi.",
+  "earthward.selection.invalid_package": "%s paketi eksik, değiştirilmiş veya desteklenmiyor. Paket kullanılmadı ve kayıtlara dokunulmadı.",
+  "earthward.selection.package_verified": "%s geometri paketi ve SHA-256 doğrulandı. Ancak yükseklik, güvenli doğuş ve dünya üreticisi henüz yok; dünya oluşturulamaz.",
   "earthward.selection.invalid_catalog": "Seçim kataloğu eksik veya bozuk. Kayıtlara dokunulmadı."
 }
